@@ -76,6 +76,46 @@ class GitHubClient:
             except Exception as e:
                 logger.warning("Failed to post comment on %s:%s: %s", finding.file, finding.line, e)
 
+    def compare_branches(self, repo_name: str, base: str, head: str) -> PRContext | None:
+        """Compare two branches and return a PRContext-like object with the diff."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            comparison = repo.compare(base, head)
+
+            files: list[DiffFile] = []
+            for f in comparison.files:
+                df = DiffFile(
+                    path=f.filename,
+                    status=f.status,
+                    additions=f.additions,
+                    deletions=f.deletions,
+                )
+                if f.patch:
+                    from code_review_agent.core.diff_parser import DiffParser
+                    parsed = DiffParser().parse(
+                        f"diff --git a/{f.filename} b/{f.filename}\n{f.patch}"
+                    )
+                    if parsed:
+                        df.hunks = parsed[0].hunks
+                files.append(df)
+
+            return PRContext(
+                platform="github",
+                repo_name=repo_name,
+                pr_number=0,
+                title=f"Branch: {head} (vs {base})",
+                description=f"Comparing {head} against {base}",
+                author="",
+                branch=head,
+                base_branch=base,
+                url=f"https://github.com/{repo_name}/compare/{base}...{head}",
+                files=files,
+                commit_sha=comparison.merge_base_commit.sha if comparison.merge_base_commit else "",
+            )
+        except Exception as e:
+            logger.error("Failed to compare %s...%s in %s: %s", base, head, repo_name, e)
+            return None
+
     def get_file_content(self, repo_name: str, path: str, ref: str = "") -> str | None:
         """Fetch a single file's content from the repo. Returns the decoded text or None."""
         try:

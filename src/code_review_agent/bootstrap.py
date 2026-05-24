@@ -169,7 +169,13 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
         gitlab_client=ctx.gitlab_client,
         skill_loader=ctx.skill_loader,
     ))
-    ctx.action_dispatcher.register(Intent.REVIEW_BRANCH, ReviewBranchAction())
+    ctx.action_dispatcher.register(Intent.REVIEW_BRANCH, ReviewBranchAction(
+        core_engine=ctx.orchestrator,
+        llm_router=ctx.model_router,
+        github_client=ctx.github_client,
+        gitlab_client=ctx.gitlab_client,
+        skill_loader=ctx.skill_loader,
+    ))
     ctx.action_dispatcher.register(Intent.REVIEW_COMMIT, ReviewCommitAction())
     ctx.action_dispatcher.register(Intent.EXPLAIN, ExplainAction(
         llm_router=ctx.model_router, fallback=ctx.fallback_chain,

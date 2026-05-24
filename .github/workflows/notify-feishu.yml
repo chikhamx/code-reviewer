@@ -70,11 +70,17 @@ jobs:
           ).json()
           token = token_resp['tenant_access_token']
 
+          ref_name = '${{ github.ref_name }}'
+          repo = '${{ github.repository }}'
+          actor = '${{ github.actor }}'
+          default_branch = '${{ github.event.repository.default_branch }}'
+
           text = '[Push] {actor} -> {ref}\\nRepo: {repo}'.format(
-              actor='${{ github.actor }}',
-              ref='${{ github.ref_name }}',
-              repo='${{ github.repository }}',
+              actor=actor, ref=ref_name, repo=repo,
           )
+          # Trigger branch review for non-default branches
+          if ref_name != default_branch:
+              text += '\\n\\nreview branch {ref} in {repo}'.format(ref=ref_name, repo=repo)
 
           headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
           payload = {
