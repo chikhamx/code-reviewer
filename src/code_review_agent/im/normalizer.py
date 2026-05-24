@@ -61,7 +61,7 @@ class MessageNormalizer:
             return {
                 "platform": "feishu",
                 "msg_id": message.get("message_id", ""),
-                "session_id": f"feishu:{chat_id}:{open_id}",
+                "session_id": f"feishu:{chat_id}",  # shared per group, not per user
                 "channel_id": chat_id,
                 "user_id": open_id,
                 "user_name": "",
