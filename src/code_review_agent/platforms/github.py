@@ -116,6 +116,50 @@ class GitHubClient:
             logger.error("Failed to compare %s...%s in %s: %s", base, head, repo_name, e)
             return None
 
+    def get_commit_diff(self, repo_name: str, commit_sha: str) -> PRContext | None:
+        """Get a single commit's diff as a PRContext-like object."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            commit = repo.get_commit(commit_sha)
+
+            files: list[DiffFile] = []
+            for f in commit.files:
+                df = DiffFile(
+                    path=f.filename,
+                    status=f.status,
+                    additions=f.additions,
+                    deletions=f.deletions,
+                )
+                if f.patch:
+                    from code_review_agent.core.diff_parser import DiffParser
+                    parsed = DiffParser().parse(
+                        f"diff --git a/{f.filename} b/{f.filename}\n{f.patch}"
+                    )
+                    if parsed:
+                        df.hunks = parsed[0].hunks
+                files.append(df)
+
+            msg = commit.commit.message if hasattr(commit, 'commit') else ""
+            author = commit.author.login if commit.author else ""
+            date_str = commit.commit.author.date.isoformat() if hasattr(commit, 'commit') and commit.commit.author else ""
+
+            return PRContext(
+                platform="github",
+                repo_name=repo_name,
+                pr_number=0,
+                title=f"Commit {commit_sha[:7]}: {msg[:80].split(chr(10))[0]}",
+                description=msg,
+                author=author,
+                branch="",
+                base_branch="",
+                url=commit.html_url,
+                files=files,
+                commit_sha=commit_sha,
+            )
+        except Exception as e:
+            logger.error("Failed to get commit %s in %s: %s", commit_sha[:8], repo_name, e)
+            return None
+
     def get_file_content(self, repo_name: str, path: str, ref: str = "") -> str | None:
         """Fetch a single file's content from the repo. Returns the decoded text or None."""
         try:

@@ -58,7 +58,7 @@ jobs:
           print('Feishu:', resp.status_code, resp.text[:500])
           PYEOF
 
-      - name: Push — 通知（非默认分支触发 Review）
+      - name: Push — 通知 + 触发 Commit Review
         if: github.event_name == 'push'
         env:
           APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
@@ -66,7 +66,7 @@ jobs:
           CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
         run: |
           python3 << 'PYEOF'
-          import requests, json
+          import requests, json, os
 
           token_resp = requests.post(
               'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
@@ -78,16 +78,35 @@ jobs:
           ref_name = "${{ github.ref_name }}"
           repo = "${{ github.repository }}"
           actor = "${{ github.actor }}"
-          default_branch = "${{ github.event.repository.default_branch }}"
 
           lines = [
               "<at user_id=\"ou_d13854a527652c37c068292c41c9f1d2\">Code Review Bot</at>",
               "[Push] %s -> %s" % (actor, ref_name),
               "Repo: %s" % repo,
+              "",
           ]
-          if ref_name != default_branch:
-              lines.append("")
-              lines.append("review branch %s in %s" % (ref_name, repo))
+
+          # Parse commit details from event JSON
+          event_path = os.environ.get('GITHUB_EVENT_PATH', '')
+          if event_path:
+              with open(event_path) as f:
+                  event = json.load(f)
+              commits = event.get('commits', [])
+              if commits:
+                  lines.append("Commits:")
+                  for c in commits[:5]:
+                      sha = c['id'][:7]
+                      msg = c['message'].split('\n')[0][:80]
+                      ts = c['timestamp'][:16].replace('T', ' ')
+                      lines.append("  %s - %s (%s)" % (sha, msg, ts))
+                  if len(commits) > 5:
+                      lines.append("  ... +%d more" % (len(commits) - 5))
+                  lines.append("")
+
+          # Trigger review of the latest commit
+          head_commit = "${{ github.event.head_commit.id }}"
+          if head_commit:
+              lines.append("review commit %s in %s" % (head_commit[:7], repo))
 
           text = "\n".join(lines)
 

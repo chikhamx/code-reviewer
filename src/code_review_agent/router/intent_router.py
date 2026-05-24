@@ -28,6 +28,7 @@ class IntentRouter:
         (r"gitlab\.com/[\w.-]+/[\w.-]+/-/merge_requests/\d+", Intent.REVIEW_PR, 10),
         (r"(review|审查|看一下|check).*(PR|pull|request|mr|merge).*#?\s*\d+", Intent.REVIEW_PR, 8),
         (r"(review|审查|看|check)\s+(分支|branch)", Intent.REVIEW_BRANCH, 7),
+        (r"(review|审查|看|check)\s*(commit|提交)\s+[a-f0-9]{7,40}", Intent.REVIEW_COMMIT, 10),
         (r"(review|审查|看|check)\s*(最近|last|latest)?\s*(commit|提交)", Intent.REVIEW_COMMIT, 7),
         (r"(解释|说明|这是怎么|what does|explain).*(代码|逻辑|这段|function|这段代码|这里)", Intent.EXPLAIN, 7),
         (r"(怎么修|怎么改|如何修复|建议|方案|fix|suggest).*(问题|这里|这个|第\s*\d)", Intent.SUGGEST_FIX, 8),
