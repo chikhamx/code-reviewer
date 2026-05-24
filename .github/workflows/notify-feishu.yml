@@ -1,4 +1,4 @@
-name: Notify Feishu Code Review Bot
+name: Notify Code Review Bot
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: 发送飞书通知 — PR Review
+      - name: PR — 通知 + 触发自动 Review
         if: github.event_name == 'pull_request'
         env:
           APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
@@ -30,8 +30,16 @@ jobs:
           pr_title = '${{ github.event.pull_request.title }}'.replace('\"', '\\\\\"')
           actor = '${{ github.actor }}'
           repo = '${{ github.repository }}'
+          additions = '${{ github.event.pull_request.additions }}'
+          deletions = '${{ github.event.pull_request.deletions }}'
 
-          text = f'[PR Review] {actor} opened PR in {repo}\\n{pr_title}\\nreview {pr_url}'
+          text = (
+              f'[PR Review] {actor} opened PR\\n'
+              f'Repo: {repo}\\n'
+              f'Title: {pr_title}\\n'
+              f'Changes: +{additions} -{deletions}\\n\\n'
+              f'review {pr_url}'
+          )
 
           headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
           payload = {
@@ -43,10 +51,10 @@ jobs:
               'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
               headers=headers, json=payload
           )
-          print('Feishu:', resp.status_code, resp.text[:300])
+          print('Feishu:', resp.status_code, resp.text[:500])
           "
 
-      - name: 发送飞书通知 — Push
+      - name: Push — 通知
         if: github.event_name == 'push'
         env:
           APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
@@ -62,18 +70,26 @@ jobs:
           ).json()
           token = token_resp['tenant_access_token']
 
-          msg = '${{ github.event.head_commit.message }}'.strip().replace('\"', '\\\\\"')
-          text = f'[Push] ${{ github.actor }} pushed to ${{ github.ref_name }}\\n{msg[:200]}'
+          messages = '${{ toJson(github.event.commits) }}'
+          import json as j; commits = j.loads(messages) if messages else []
+          commit_list = '\\n'.join(
+              f'  - {c[\"message\"].split(chr(10))[0][:80]} (@{c.get(\"author\",{}).get(\"username\",c.get(\"committer\",{}).get(\"username\",\"?\"))})'
+              for c in commits[:5]
+          )
+          if len(commits) > 5:
+              commit_list += f'\\n  ... +{len(commits)-5} more'
+
+          text = f'[Push] ${{ github.actor }} -> ${{ github.ref_name }}\\nRepo: ${{ github.repository }}\\n\\n{commit_list}'
 
           headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
           payload = {
               'receive_id': '$CHAT_ID',
               'msg_type': 'text',
-              'content': json.dumps({'text': text})
+              'content': j.dumps({'text': text})
           }
           resp = requests.post(
               'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
               headers=headers, json=payload
           )
-          print('Feishu:', resp.status_code, resp.text[:300])
+          print('Feishu:', resp.status_code, resp.text[:500])
           "
