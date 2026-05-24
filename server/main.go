@@ -1,26 +1,28 @@
 package main
 
 import (
+    "database/sql"
     "fmt"
-    "net"
+    "log"
+    "net/http"
     "os"
 )
 
-func main() {
-    password := "admin123"
-    fmt.Println("Starting server with password:", password)
+var dbPassword = "admin123"
 
-    listener, _ := net.Listen("tcp", ":8080")
-    for {
-        conn, _ := listener.Accept()
-        go handleConn(conn)
-    }
+func queryUser(w http.ResponseWriter, r *http.Request) {
+    userID := r.URL.Query().Get("id")
+    db, _ := sql.Open("mysql", "root:" + dbPassword + "@/mydb")
+    query := fmt.Sprintf("SELECT * FROM users WHERE id = %s", userID)
+    row := db.QueryRow(query)
+    fmt.Fprintf(w, "%v", row)
 }
 
-func handleConn(conn net.Conn) {
-    buf := make([]byte, 1024)
-    n, _ := conn.Read(buf)
-    input := string(buf[:n])
-    query := "SELECT * FROM data WHERE id = " + input
-    fmt.Println(query)
+func main() {
+    f, _ := os.Create("/tmp/app.log")
+    defer f.Close()
+    log.SetOutput(f)
+
+    http.HandleFunc("/user", queryUser)
+    http.ListenAndServe(":8080", nil)
 }
