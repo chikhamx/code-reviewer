@@ -34,6 +34,7 @@ jobs:
           deletions = '${{ github.event.pull_request.deletions }}'
 
           text = (
+              f'<at user_id=\"ou_d13854a527652c37c068292c41c9f1d2\">Code Review Bot</at> '
               f'[PR Review] {actor} opened PR\\n'
               f'Repo: {repo}\\n'
               f'Title: {pr_title}\\n'
