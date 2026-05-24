@@ -29,6 +29,30 @@ def detect_languages(files) -> list[str]:
     return sorted(exts)
 
 
+def store_review_context(session, result, diff_text: str = "") -> None:
+    """Store review findings in session so follow-up queries can reference them."""
+    findings = []
+    for i, f in enumerate(result.findings):
+        findings.append({
+            "index": i + 1,
+            "file": f.file,
+            "line": f.line,
+            "severity": f.severity.value,
+            "category": f.category.value,
+            "title": f.title,
+            "message": f.message,
+            "suggestion": f.suggestion or "",
+            "code_snippet": f.code_snippet or "",
+        })
+    session.last_review = {
+        "title": result.pr_title,
+        "url": result.pr_url,
+        "repo": result.repo_name,
+        "findings": findings,
+        "diff": diff_text[:8000],  # cap for context window
+    }
+
+
 def format_result(result) -> str:
     headings = [
         f"## Code Review: {result.pr_title}",
@@ -37,9 +61,9 @@ def format_result(result) -> str:
         "",
     ]
     finding_lines = []
-    for f in result.findings:
+    for i, f in enumerate(result.findings):
         finding_lines.append(
-            f"- [{f.severity.value.upper()}] `{f.file}:{f.line}` — {f.message[:100]}"
+            f"- **#{i+1}** [{f.severity.value.upper()}] `{f.file}:{f.line}` — {f.message[:100]}"
         )
     summary = []
     if result.summary:

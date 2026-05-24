@@ -21,7 +21,8 @@ class SessionContext(BaseModel):
     current_target: str | None = None
     pinned_code: str | None = None
     chat_stage: str = "idle"  # idle → clarify → confirm → execute
-    research_context: dict = Field(default_factory=dict)  # accumulated clarification data
+    research_context: dict = Field(default_factory=dict)
+    last_review: dict = Field(default_factory=dict)  # stored review findings for follow-up
     metadata: dict = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_active_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

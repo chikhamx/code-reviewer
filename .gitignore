@@ -32,6 +32,7 @@ data/
 Thumbs.db
 
 # Startup scripts (contain secrets)
+start_cr.bat
 start_cr.ps1
 start_cr.sh
 

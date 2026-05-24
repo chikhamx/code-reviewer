@@ -1,7 +1,7 @@
 import logging
 
 from code_review_agent.actions.base import BaseAction
-from code_review_agent.actions.utils import detect_languages, format_result
+from code_review_agent.actions.utils import detect_languages, format_result, store_review_context
 from code_review_agent.router.intent_router import IntentRouter
 
 logger = logging.getLogger(__name__)
@@ -52,12 +52,12 @@ class ReviewPRAction(BaseAction):
 
         try:
             pr_ctx = self.github.get_pr_context(repo_name, pr_number)
-            return await self._run_review(pr_ctx, repo_name)
+            return await self._run_review(pr_ctx, repo_name, session)
         except Exception as e:
             logger.exception("PR review failed")
             return f"Failed to review PR: {e}"
 
-    async def _run_review(self, pr_ctx, repo_name: str) -> str:
+    async def _run_review(self, pr_ctx, repo_name: str, session) -> str:
         """Run the review pipeline: skills, prompts, orchestrator."""
         skill_prompts = ""
         lang_rules: list[dict] = []
@@ -79,6 +79,7 @@ class ReviewPRAction(BaseAction):
         result = await self.core_engine.review(
             pr_ctx, diff_text, skill_prompts, custom_rules=lang_rules,
         )
+        store_review_context(session, result, diff_text)
         return (
             f"Reviewing PR #{pr_ctx.pr_number} in {repo_name}...\n\n"
             + format_result(result)

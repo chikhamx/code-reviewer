@@ -2,7 +2,7 @@ import logging
 import re
 
 from code_review_agent.actions.base import BaseAction
-from code_review_agent.actions.utils import detect_languages, format_result
+from code_review_agent.actions.utils import detect_languages, format_result, store_review_context
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ class ReviewBranchAction(BaseAction):
             from code_review_agent.core.diff_parser import DiffParser
             diff_text = DiffParser().diff_to_text(ctx.files)
             result = await self.core_engine.review(ctx, diff_text, skill_prompts, custom_rules=lang_rules)
+            store_review_context(session, result, diff_text)
 
             return (
                 f"Branch Review: {branch} (vs {base}) in {repo_name}\n"
