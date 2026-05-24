@@ -64,33 +64,56 @@ class MessageChainStore:
         return chain
 
     def build_context(self, message_id: str) -> dict:
-        """Build full review context from a message's parent chain.
+        """Build full review context from message chain or thread.
 
-        Returns dict with keys: findings, trigger, recent_messages, thread_id
+        First walks the parent chain. If no review found there, searches
+        the entire thread (same root_id) for a review message.
         """
         chain = self.get_chain(message_id)
-        if not chain:
-            return {"findings": [], "trigger": {}, "recent_messages": []}
-
-        # Find the review message (contains findings)
         findings = []
         review_msg = None
-        for m in chain:
-            if m["role"] == "review" and m.get("metadata", {}).get("findings"):
-                findings = m["metadata"]["findings"]
-                review_msg = m
-                break
+        trigger = {}
+        thread_id = ""
+        recent: list[str] = []
 
-        # The last message in chain is the trigger
-        trigger = chain[-1]["metadata"] if chain[-1].get("metadata") else {}
+        if chain:
+            for m in chain:
+                if m["role"] == "review" and m.get("metadata", {}).get("findings"):
+                    findings = m["metadata"]["findings"]
+                    review_msg = m
+                    break
+            trigger = chain[-1].get("metadata", {}) if chain[-1] else {}
+            thread_id = chain[-1].get("root_id") or chain[-1]["message_id"]
+            recent = [m["content"] for m in chain[:5] if m.get("content")]
 
-        recent = [m["content"] for m in chain[:5] if m.get("content")]
+        # Fallback: search the whole thread for a review message
+        if not findings and thread_id:
+            session = self._session_factory()
+            try:
+                from sqlalchemy import select
+                from code_review_agent.db.models import MessageRecord
+                stmt = (
+                    select(MessageRecord)
+                    .where(MessageRecord.root_id == thread_id)
+                    .where(MessageRecord.role == "review")
+                    .order_by(MessageRecord.created_at.desc())
+                    .limit(1)
+                )
+                row = session.execute(stmt).scalar_one_or_none()
+                if row:
+                    meta = row.metadata_dict
+                    if meta.get("findings"):
+                        findings = meta["findings"]
+                        review_msg = row.to_dict()
+                        thread_id = row.root_id or thread_id
+            finally:
+                session.close()
 
         return {
             "findings": findings,
             "trigger": trigger,
             "recent_messages": recent,
-            "thread_id": chain[-1].get("root_id") or chain[-1]["message_id"],
+            "thread_id": thread_id,
             "review_message": review_msg,
         }
 
