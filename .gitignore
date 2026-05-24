@@ -40,5 +40,8 @@ start_cr.sh
 *.log
 /tmp/
 
+# Ollama (auto-downloaded)
+tools/ollama/
+
 # Claude Code
 .claude/
