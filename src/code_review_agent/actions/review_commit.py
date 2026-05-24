@@ -25,6 +25,12 @@ class ReviewCommitAction(BaseAction):
             r"(?:review|审查)\s*(?:commit|提交)\s+([a-f0-9]{7,40})\s*(?:in\s+([\w.-]+/[\w.-]+))?",
             text, re.IGNORECASE,
         )
+        # Also try parsing multiple commits: "review commits abc1234 def5678 in org/repo"
+        if not match:
+            match = re.search(
+                r"(?:review|审查)\s*(?:commits|提交)\s+([a-f0-9]{7,40})(?:\s+[a-f0-9]{7,40})*\s*(?:in\s+([\w.-]+/[\w.-]+))?",
+                text, re.IGNORECASE,
+            )
         if not match:
             return (
                 "Please specify a commit to review. Examples:\n"
@@ -48,7 +54,10 @@ class ReviewCommitAction(BaseAction):
             logger.info("Fetching commit %s in %s", commit_sha[:8], repo_name)
             ctx = self.github.get_commit_diff(repo_name, commit_sha)
             if not ctx:
-                return f"Could not fetch commit {commit_sha[:8]} in {repo_name}."
+                return (
+                    f"Could not fetch commit {commit_sha[:8]} in {repo_name}.\\n"
+                    f"Check that the commit exists and the token has repo access."
+                )
 
             skill_prompts = ""
             lang_rules: list[dict] = []
