@@ -38,9 +38,19 @@ async def ensure_ollama(llm_config: dict) -> bool:
     base_url = ollama_cfg.get("base_url", OLLAMA_HOST)
     native_url = base_url.rstrip("/").removesuffix("/v1")
 
-    # Already running? (only 200 counts, 502 etc. means something else on the port)
+    # Already running? (only 200 counts)
     if await _check_ollama(native_url):
         return True
+
+    # If started by start_cr script, don't kill — it may still be initializing
+    if os.environ.get("OLLAMA_STARTED") == "1":
+        logger.info("Ollama was started by startup script, waiting for it...")
+        for _ in range(10):
+            time.sleep(2)
+            if await _check_ollama(OLLAMA_HOST):
+                return True
+        logger.warning("Ollama started by script but not responding — will use remote LLM")
+        return False
 
     # Kill any stale process on the Ollama port
     _kill_port(11434)
