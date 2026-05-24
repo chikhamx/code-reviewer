@@ -258,6 +258,12 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
     )
     normalizer = MessageNormalizer()
 
+    # Review queue (concurrent review execution)
+    from code_review_agent.core.queue import ReviewQueue
+    max_concurrency = ctx.config.get("review", "max_concurrency", default=3)
+    review_queue = ReviewQueue(max_concurrency=max_concurrency)
+    logger.info("Review queue initialized (max_concurrency=%d)", max_concurrency)
+
     ctx.im_gateway = IMGateway(
         normalizer=normalizer,
         sender=ctx.im_sender,
@@ -265,6 +271,7 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
         action_dispatcher=ctx.action_dispatcher,
         conversation_manager=ctx.conversation_manager,
         message_store=ctx.message_store,
+        review_queue=review_queue,
     )
     logger.info("IM gateway initialized")
 

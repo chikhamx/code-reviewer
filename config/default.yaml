@@ -36,6 +36,7 @@ review:
   max_files_per_review: 50
   max_diff_tokens: 80000
   chunk_size_tokens: 30000
+  max_concurrency: 3
   dimensions:
     - bug_risk
     - security
