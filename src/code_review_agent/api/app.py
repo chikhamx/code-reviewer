@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI):
     feishu_ws = getattr(app.state, "feishu_ws", None)
     if feishu_ws:
         feishu_ws.stop()
+    store = getattr(app.state, "message_store", None)
+    if store:
+        store.stop()
     logger.info("Code Review Agent shut down")
 
 

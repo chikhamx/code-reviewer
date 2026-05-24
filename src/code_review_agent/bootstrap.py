@@ -40,16 +40,17 @@ class AppContext:
         self.orchestrator = None
         self.github_client = None
         self.gitlab_client = None
-        self.conversation_manager = None
+        self.conversation_manager = None  # deprecated, use message_store
+        self.message_store: object = None  # MessageChainStore
         self.intent_router = None
         self.action_dispatcher = None
         self.im_gateway = None
         self.im_sender = None
         self.webhook_dispatcher = None
         self.platform_commenter = None
-        self.feishu_api: object = None  # FeishuSDKClient
-        self.feishu_ws: object = None   # FeishuWSListener
-        self.skill_loader: object = None  # SkillLoader
+        self.feishu_api: object = None
+        self.feishu_ws: object = None
+        self.skill_loader: object = None
 
 
 _ctx = AppContext()
@@ -130,14 +131,36 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
         )
         logger.info("GitLab client initialized")
 
-    # ── 6. Conversation Manager ──
+    # ── 6. DB (must init before message store) ──
+    db_url = ctx.config.get("database", "url", default="")
+    if db_url:
+        try:
+            from code_review_agent.db.repository import init_db
+            await init_db(db_url)
+            logger.info("Database initialized")
+        except Exception as e:
+            logger.warning("Database initialization skipped: %s", e)
+
+    # ── 7. Session Store (SQLite-backed message chain) ──
+    if db_url:
+        from code_review_agent.db.repository import get_sync_session_factory
+        from code_review_agent.db.store import MessageChainStore
+        try:
+            sf = get_sync_session_factory()
+            ctx.message_store = MessageChainStore(sf)
+            ctx.message_store.start()
+            logger.info("Message chain store initialized")
+        except Exception as e:
+            logger.warning("Message store init failed, using memory fallback: %s", e)
+            ctx.message_store = None
+
+    # Legacy conversation manager (keep for compatibility)
     from code_review_agent.conversation.manager import ConversationManager
     session_cfg = ctx.config.get("im", default={}).get("session", {})
     ctx.conversation_manager = ConversationManager(
         ttl=session_cfg.get("ttl", 3600),
         max_history=session_cfg.get("max_history_turns", 20),
     )
-    logger.info("Conversation manager initialized (ttl=%ds)", session_cfg.get("ttl", 3600))
 
     # ── 7. Intent Router ──
     from code_review_agent.router.intent_router import IntentRouter
@@ -233,6 +256,7 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
         intent_router=ctx.intent_router,
         action_dispatcher=ctx.action_dispatcher,
         conversation_manager=ctx.conversation_manager,
+        message_store=ctx.message_store,
     )
     logger.info("IM gateway initialized")
 
@@ -275,16 +299,6 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
     ctx.webhook_dispatcher = WebhookDispatcher(webhook_configs)
     logger.info("Output layer initialized (%d webhooks)", len(webhook_configs))
 
-    # ── 11. DB (optional) ──
-    db_url = ctx.config.get("database", "url", default="")
-    if db_url:
-        try:
-            from code_review_agent.db.repository import init_db
-            await init_db(db_url)
-            logger.info("Database initialized")
-        except Exception as e:
-            logger.warning("Database initialization skipped: %s", e)
-
     logger.info("Bootstrap complete — all components initialized")
     return ctx
 
@@ -313,6 +327,7 @@ def attach_to_app(app):
     app.state.platform_commenter = ctx.platform_commenter
     app.state.feishu_api = ctx.feishu_api
     app.state.feishu_ws = ctx.feishu_ws
+    app.state.message_store = ctx.message_store
     app.state.skill_loader = ctx.skill_loader
 
     logger.info("App context attached to FastAPI state")
