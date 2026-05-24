@@ -1,0 +1,67 @@
+# Code Review Agent — Default Configuration
+# All values can be overridden via environment variables prefixed with CR_
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+
+# GitHub App or Personal Access Token
+github:
+  app_id: ""
+  private_key: ""
+  webhook_secret: ""
+  token: "${GITHUB_TOKEN}"
+
+gitlab:
+  url: "https://gitlab.com"
+  token: "${GITLAB_TOKEN}"
+  webhook_secret: ""
+
+# Redis for Celery queue and session storage
+redis:
+  url: "redis://localhost:6379/0"
+
+# Celery task queue
+celery:
+  broker_url: "redis://localhost:6379/1"
+  result_backend: "redis://localhost:6379/2"
+
+# Database (SQLite for dev, PostgreSQL for prod)
+database:
+  url: "sqlite+aiosqlite:///data/cr_agent.db"
+
+# Review defaults
+review:
+  max_files_per_review: 50
+  max_diff_tokens: 80000
+  chunk_size_tokens: 30000
+  dimensions:
+    - bug_risk
+    - security
+    - performance
+    - maintainability
+  severity_levels:
+    - critical
+    - error
+    - warning
+    - info
+    - suggestion
+
+# LLM configuration — see llm.example.yaml for full options
+llm:
+  config_path: "llm.yaml"
+  default_smart_alias: "smart"
+  default_fast_alias: "fast"
+
+# Webhook output configuration — see webhooks.example.yaml
+webhooks:
+  config_path: "webhooks.yaml"
+
+# IM platform configuration — see im.example.yaml
+im:
+  config_path: "im.yaml"
+
+logging:
+  level: "INFO"
+  format: "json"  # json | console

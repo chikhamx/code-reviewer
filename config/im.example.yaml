@@ -1,0 +1,48 @@
+# IM Platform Configuration for Bidirectional Messaging
+# Copy to im.yaml and fill in your credentials.
+
+platforms:
+  feishu:
+    enabled: false
+    app_id: ""
+    app_secret: ""
+    verification_token: ""
+    bot_name: "Code Review Bot"
+    webhook_path: "/api/im/feishu"
+    use_websocket: true  # true = lark-oapi WS long connection (no ngrok needed)
+                          # false = HTTP webhook (needs public URL)
+
+  dingtalk:
+    enabled: false
+    app_key: ""
+    app_secret: ""
+    robot_code: ""
+    bot_name: "Code Review Bot"
+    webhook_path: "/api/im/dingtalk"
+
+  wecom:
+    enabled: false
+    corp_id: ""
+    agent_id: ""
+    secret: ""
+    token: ""
+    encoding_aes_key: ""
+    bot_name: "Code Review Bot"
+    webhook_path: "/api/im/wecom"
+
+  slack:
+    enabled: false
+    bot_token: "${SLACK_BOT_TOKEN}"
+    signing_secret: "${SLACK_SIGNING_SECRET}"
+    app_token: "${SLACK_APP_TOKEN}"
+    bot_name: "Code Review Bot"
+    webhook_path: "/api/im/slack"
+
+# Session timeout in seconds (1 hour default)
+session:
+  ttl: 3600
+  max_history_turns: 20
+
+# Message deduplication
+dedup:
+  ttl: 300  # 5 minutes

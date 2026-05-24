@@ -1,0 +1,79 @@
+name: Notify Feishu Code Review Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送飞书通知 — PR Review
+        if: github.event_name == 'pull_request'
+        env:
+          APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}
+          CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
+        run: |
+          python3 -c "
+          import requests, json
+
+          token_resp = requests.post(
+              'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+              json={'app_id': '$APP_ID', 'app_secret': '$APP_SECRET'}
+          ).json()
+          token = token_resp['tenant_access_token']
+
+          pr_url = '${{ github.event.pull_request.html_url }}'
+          pr_title = '${{ github.event.pull_request.title }}'.replace('\"', '\\\\\"')
+          actor = '${{ github.actor }}'
+          repo = '${{ github.repository }}'
+
+          text = f'[PR Review] {actor} opened PR in {repo}\\n{pr_title}\\nreview {pr_url}'
+
+          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          payload = {
+              'receive_id': '$CHAT_ID',
+              'msg_type': 'text',
+              'content': json.dumps({'text': text})
+          }
+          resp = requests.post(
+              'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
+              headers=headers, json=payload
+          )
+          print('Feishu:', resp.status_code, resp.text[:300])
+          "
+
+      - name: 发送飞书通知 — Push
+        if: github.event_name == 'push'
+        env:
+          APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}
+          CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
+        run: |
+          python3 -c "
+          import requests, json
+
+          token_resp = requests.post(
+              'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+              json={'app_id': '$APP_ID', 'app_secret': '$APP_SECRET'}
+          ).json()
+          token = token_resp['tenant_access_token']
+
+          msg = '${{ github.event.head_commit.message }}'.strip().replace('\"', '\\\\\"')
+          text = f'[Push] ${{ github.actor }} pushed to ${{ github.ref_name }}\\n{msg[:200]}'
+
+          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          payload = {
+              'receive_id': '$CHAT_ID',
+              'msg_type': 'text',
+              'content': json.dumps({'text': text})
+          }
+          resp = requests.post(
+              'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
+              headers=headers, json=payload
+          )
+          print('Feishu:', resp.status_code, resp.text[:300])
+          "

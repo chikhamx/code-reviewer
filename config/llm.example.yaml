@@ -1,0 +1,93 @@
+# LLM Provider Configuration
+# Copy to llm.yaml and fill in your API keys.
+# Environment variables with ${VAR} syntax are expanded at load time.
+
+providers:
+  claude:
+    enabled: true
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: null
+    models:
+      - id: claude-sonnet-4-6
+        alias: [smart, default]
+        max_tokens: 8192
+        supports_tools: true
+        supports_vision: true
+      - id: claude-haiku-4-5
+        alias: [fast]
+        max_tokens: 4096
+        supports_tools: true
+        supports_vision: false
+
+  openai:
+    enabled: false
+    api_key: "${OPENAI_API_KEY}"
+    base_url: null
+    models:
+      - id: gpt-4o
+        alias: [smart]
+        max_tokens: 8192
+      - id: gpt-4o-mini
+        alias: [fast]
+        max_tokens: 4096
+
+  deepseek:
+    enabled: false
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    models:
+      - id: deepseek-v3
+        alias: [smart]
+        max_tokens: 8192
+      - id: deepseek-chat
+        alias: [fast]
+        max_tokens: 4096
+
+  ollama:
+    enabled: false
+    api_key: "unused"
+    base_url: "http://localhost:11434/v1"
+    models:
+      - id: qwen3:70b
+        alias: [smart-local]
+        max_tokens: 4096
+      - id: qwen3:8b
+        alias: [fast-local]
+        max_tokens: 2048
+
+  custom:
+    # Add any OpenAI-compatible provider here.
+    # Example for Groq:
+    # - name: groq
+    #   api_key: "${GROQ_API_KEY}"
+    #   base_url: "https://api.groq.com/openai/v1"
+    #   models:
+    #     - id: llama-4
+    #       alias: [smart]
+    []
+
+# Pricing per 1M tokens [input, output] in USD
+# "*" as model_id matches any model from that provider
+pricing:
+  claude:
+    claude-sonnet-4-6: [3.00, 15.00]
+    claude-haiku-4-5:  [0.80,  4.00]
+  openai:
+    gpt-4o:           [2.50, 10.00]
+    gpt-4o-mini:      [0.15,  0.60]
+  deepseek:
+    deepseek-v3:      [0.27,  1.10]
+    deepseek-chat:    [0.14,  0.28]
+  ollama:
+    "*":              [0, 0]
+
+# Task → model alias mapping
+task_model_map:
+  review:           smart
+  intent_classify:  fast
+  explain:          smart
+  suggest_fix:      smart
+  refactor:         smart
+  search:           fast
+  chat:             smart
+  summary:          fast

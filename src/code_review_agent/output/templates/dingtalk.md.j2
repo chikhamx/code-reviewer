@@ -1,0 +1,12 @@
+## 🤖 Code Review: {{ pr_title }}
+
+- **风险等级**: {{ risk_level.upper() }}
+- **分支**: {{ branch }} → {{ base_branch }}
+- **作者**: {{ author }}
+- **发现问题**: {{ stats.total }} 个
+
+{% for f in findings[:10] %}
+- [{{ f.severity.upper() }}] `{{ f.file }}:{{ f.line }}` — {{ f.message[:80] }}
+{% endfor %}
+
+📄 [View PR]({{ pr_url }}) | ⏱️ {{ review_duration_ms }}ms

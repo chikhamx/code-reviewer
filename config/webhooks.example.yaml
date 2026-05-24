@@ -1,0 +1,58 @@
+# Dynamic Webhook Output Configuration
+# Copy to webhooks.yaml and customize.
+
+webhooks:
+  - name: "team-feishu"
+    enabled: true
+    type: feishu
+    url: "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR-KEY"
+    secret: "your-signing-secret"
+    triggers:
+      min_severity: warning
+      on_category: ["bug", "security"]
+      on_review_complete: true
+
+  - name: "general-dingtalk"
+    enabled: false
+    type: dingtalk
+    url: "https://oapi.dingtalk.com/robot/send?access_token=YOUR-TOKEN"
+    secret: "your-signing-secret"
+    triggers:
+      min_severity: error
+      on_review_complete: true
+
+  - name: "dev-wecom"
+    enabled: false
+    type: wecom
+    url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR-KEY"
+    triggers:
+      on_review_complete: true
+
+  - name: "slack-channel"
+    enabled: false
+    type: slack
+    url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    triggers:
+      min_severity: error
+      on_review_complete: true
+
+  - name: "custom-monitor"
+    enabled: false
+    type: generic
+    url: "https://my-system.com/api/cr-callback"
+    method: POST
+    headers:
+      Authorization: "Bearer ${MONITOR_TOKEN}"
+      Content-Type: "application/json"
+    body_template: |
+      {
+        "repo": "{repo_name}",
+        "pr": {pr_number},
+        "branch": "{branch}",
+        "risk_level": "{risk_level}",
+        "findings": {findings_json},
+        "stats": {stats_json},
+        "timestamp": "{timestamp}"
+      }
+    triggers:
+      on_review_complete: true

@@ -1,0 +1,25 @@
+{
+  "msg_type": "interactive",
+  "card": {
+    "header": {
+      "title": {"tag": "plain_text", "content": "🤖 Code Review: {{ pr_title }}"},
+      "template": "{{ 'red' if risk_level == 'critical' else 'orange' if risk_level == 'high' else 'yellow' if risk_level == 'medium' else 'green' }}"
+    },
+    "elements": [
+      {
+        "tag": "markdown",
+        "content": "**Repo**: {{ repo_name }}\n**Branch**: {{ branch }} → {{ base_branch }}\n**Author**: {{ author }}\n**Risk**: {{ risk_level.upper() }}\n**Findings**: {{ stats.total }}"
+      },
+      {"tag": "hr"},
+      {
+        "tag": "markdown",
+        "content": "{% for f in findings[:10] %}{% set icons = {'critical': '🔴', 'error': '🟠', 'warning': '🟡', 'info': '🔵', 'suggestion': '💡'} %}- {{ icons.get(f.severity, '') }} **{{ f.file }}{% if f.line %}:{{ f.line }}{% endif %}**: {{ f.message[:100] }}\n{% endfor %}{% if findings|length > 10 %}... and {{ findings|length - 10 }} more{% endif %}"
+      },
+      {"tag": "hr"},
+      {
+        "tag": "markdown",
+        "content": "📄 [View PR]({{ pr_url }}) | ⏱️ {{ review_duration_ms }}ms"
+      }
+    ]
+  }
+}

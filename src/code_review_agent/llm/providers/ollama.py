@@ -1,0 +1,53 @@
+from code_review_agent.llm.base import BaseLLMProvider, LLMResponse, Usage
+
+
+class OllamaProvider(BaseLLMProvider):
+    provider_name = "ollama"
+
+    def __init__(self, api_key: str = "unused", base_url: str = "http://localhost:11434/v1"):
+        try:
+            from openai import AsyncOpenAI
+        except ImportError:
+            raise ImportError("openai package is required for OllamaProvider. pip install openai")
+
+        self.client = AsyncOpenAI(base_url=base_url, api_key=api_key or "ollama")
+
+    async def chat(
+        self,
+        messages: list[dict],
+        *,
+        model: str | None = None,
+        tools: list[dict] | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.0,
+        stream: bool = False,
+    ) -> LLMResponse:
+        model = model or "qwen3:70b"
+        resp = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        choice = resp.choices[0]
+
+        input_tokens = resp.usage.prompt_tokens if resp.usage else 0
+        output_tokens = resp.usage.completion_tokens if resp.usage else 0
+
+        return LLMResponse(
+            content=choice.message.content or "",
+            model=resp.model,
+            provider=self.provider_name,
+            usage=Usage(
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                total_tokens=input_tokens + output_tokens,
+            ),
+            finish_reason=choice.finish_reason or "stop",
+        )
+
+    def supports_tools(self) -> bool:
+        return False
+
+    def supports_vision(self) -> bool:
+        return False
