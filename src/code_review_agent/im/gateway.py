@@ -104,6 +104,12 @@ class IMGateway:
 
         # ── Classify intent ──
         intent = await self.intent_router.classify(text, session)
+        # If user is asking about review findings but L1/L2 classified as chat,
+        # re-route to suggest_fix so they get context-aware answers
+        if intent and intent.value == "chat" and chain_ctx.get("findings"):
+            from code_review_agent.router.intent_router import Intent
+            intent = Intent.SUGGEST_FIX
+            logger.info(">>> GATEWAY: chat→suggest_fix (review context available)")
         session.current_intent = intent.value if intent else None
         logger.info(">>> GATEWAY: intent=%s", intent.value if intent else "unknown")
 
