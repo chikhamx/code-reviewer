@@ -17,33 +17,37 @@ jobs:
           APP_SECRET: ${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}
           CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
         run: |
-          python3 -c "
+          python3 << 'PYEOF'
           import requests, json
 
           token_resp = requests.post(
               'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-              json={'app_id': '$APP_ID', 'app_secret': '$APP_SECRET'}
+              json={'app_id': '${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}',
+                    'app_secret': '${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}'}
           ).json()
           token = token_resp['tenant_access_token']
 
-          pr_url = '${{ github.event.pull_request.html_url }}'
-          pr_title = '${{ github.event.pull_request.title }}'.replace('\"', '\\\\\"')
-          actor = '${{ github.actor }}'
-          repo = '${{ github.repository }}'
-          additions = '${{ github.event.pull_request.additions }}'
-          deletions = '${{ github.event.pull_request.deletions }}'
+          pr_url = "${{ github.event.pull_request.html_url }}"
+          pr_title = "${{ github.event.pull_request.title }}"
+          actor = "${{ github.actor }}"
+          repo = "${{ github.repository }}"
+          adds = "${{ github.event.pull_request.additions }}"
+          dels = "${{ github.event.pull_request.deletions }}"
 
-          text = (
-              f'[PR Review] {actor} opened PR\\n'
-              f'Repo: {repo}\\n'
-              f'Title: {pr_title}\\n'
-              f'Changes: +{additions} -{deletions}\\n\\n'
-              f'review {pr_url}'
-          )
+          lines = [
+              "<at user_id=\"ou_d13854a527652c37c068292c41c9f1d2\">Code Review Bot</at>",
+              "[PR Review] %s opened PR" % actor,
+              "Repo: %s" % repo,
+              "Title: %s" % pr_title,
+              "Changes: +%s -%s" % (adds, dels),
+              "",
+              "review %s" % pr_url,
+          ]
+          text = "\n".join(lines)
 
-          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          headers = {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}
           payload = {
-              'receive_id': '$CHAT_ID',
+              'receive_id': '${{ secrets.FEISHU_CHAT_ID }}',
               'msg_type': 'text',
               'content': json.dumps({'text': text})
           }
@@ -52,39 +56,44 @@ jobs:
               headers=headers, json=payload
           )
           print('Feishu:', resp.status_code, resp.text[:500])
-          "
+          PYEOF
 
-      - name: Push — 通知
+      - name: Push — 通知（非默认分支触发 Review）
         if: github.event_name == 'push'
         env:
           APP_ID: ${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}
           APP_SECRET: ${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}
           CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
         run: |
-          python3 -c "
+          python3 << 'PYEOF'
           import requests, json
 
           token_resp = requests.post(
               'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
-              json={'app_id': '$APP_ID', 'app_secret': '$APP_SECRET'}
+              json={'app_id': '${{ secrets.FEISHU_GIT_LISTENER_APP_ID }}',
+                    'app_secret': '${{ secrets.FEISHU_GIT_LISTENER_APP_SECRET }}'}
           ).json()
           token = token_resp['tenant_access_token']
 
-          ref_name = '${{ github.ref_name }}'
-          repo = '${{ github.repository }}'
-          actor = '${{ github.actor }}'
-          default_branch = '${{ github.event.repository.default_branch }}'
+          ref_name = "${{ github.ref_name }}"
+          repo = "${{ github.repository }}"
+          actor = "${{ github.actor }}"
+          default_branch = "${{ github.event.repository.default_branch }}"
 
-          text = '[Push] {actor} -> {ref}\\nRepo: {repo}'.format(
-              actor=actor, ref=ref_name, repo=repo,
-          )
-          # Trigger branch review for non-default branches
+          lines = [
+              "<at user_id=\"ou_d13854a527652c37c068292c41c9f1d2\">Code Review Bot</at>",
+              "[Push] %s -> %s" % (actor, ref_name),
+              "Repo: %s" % repo,
+          ]
           if ref_name != default_branch:
-              text += '\\n\\nreview branch {ref} in {repo}'.format(ref=ref_name, repo=repo)
+              lines.append("")
+              lines.append("review branch %s in %s" % (ref_name, repo))
 
-          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+          text = "\n".join(lines)
+
+          headers = {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}
           payload = {
-              'receive_id': '$CHAT_ID',
+              'receive_id': '${{ secrets.FEISHU_CHAT_ID }}',
               'msg_type': 'text',
               'content': json.dumps({'text': text})
           }
@@ -93,4 +102,4 @@ jobs:
               headers=headers, json=payload
           )
           print('Feishu:', resp.status_code, resp.text[:500])
-          "
+          PYEOF
