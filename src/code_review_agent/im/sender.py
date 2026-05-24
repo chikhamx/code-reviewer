@@ -3,8 +3,8 @@
 Each platform has a different API for sending messages. The sender
 uses the platform config from config/im.yaml to authenticate.
 
-For Feishu, preferentially uses the lark-oapi SDK client when available,
-falling back to raw HTTP calls the same as before.
+All reply methods return the platform-specific message_id on success,
+or None on failure.
 """
 
 import json
@@ -30,14 +30,8 @@ class IMSender:
         self.configs = platform_configs or {}
         self._feishu = feishu_client
 
-    async def reply(self, platform: str, normalized: dict, text: str) -> bool:
-        """Send a reply message back to the user/group.
-
-        Args:
-            platform: 'feishu' | 'dingtalk' | 'wecom' | 'slack'
-            normalized: The normalized message dict (contains channel_id, msg_id, etc.)
-            text: The response text to send
-        """
+    async def reply(self, platform: str, normalized: dict, text: str) -> str | None:
+        """Send a reply message. Returns message_id on success, None on failure."""
         channel_id = normalized.get("channel_id", "")
         msg_id = normalized.get("msg_id", "")
         root_id = normalized.get("root_id", "")
@@ -53,30 +47,19 @@ class IMSender:
             return await self._reply_slack(channel_id, text)
         else:
             logger.warning("Unknown platform '%s' for reply", platform)
-            return False
+            return None
 
     # ── Feishu (Lark) reply ──
 
     async def _reply_feishu(
-        self,
-        chat_id: str,
-        text: str,
-        reply_msg_id: str = "",
-        root_id: str = "",
-    ) -> bool:
-        """Send a text message to a Feishu chat.
-
-        Prefers the SDK client (FeishuSDKClient) if configured. Falls back
-        to raw HTTP calls with manually obtained tenant_access_token.
-        """
-        # Prefer SDK client when available
+        self, chat_id: str, text: str, reply_msg_id: str = "", root_id: str = "",
+    ) -> str | None:
+        # Prefer SDK client
         if self._feishu:
             try:
                 if reply_msg_id:
-                    msg_id = await self._feishu.reply_message(reply_msg_id, text)
-                else:
-                    msg_id = await self._feishu.send_message(chat_id, text)
-                return msg_id is not None
+                    return await self._feishu.reply_message(reply_msg_id, text)
+                return await self._feishu.send_message(chat_id, text)
             except Exception as e:
                 logger.warning("Feishu SDK send failed, falling back to HTTP: %s", e)
 
@@ -84,69 +67,42 @@ class IMSender:
         cfg = self.configs.get("feishu", {})
         app_id = cfg.get("app_id", "")
         app_secret = cfg.get("app_secret", "")
-
         if not app_id or not app_secret:
-            logger.warning("Feishu not configured for sending (missing app_id/app_secret)")
-            return False
+            logger.warning("Feishu not configured for sending")
+            return None
 
         try:
             token = await self._get_feishu_token(app_id, app_secret)
             if not token:
-                logger.error("Failed to get Feishu tenant access token")
-                return False
+                return None
 
             content = json.dumps({"text": text}, ensure_ascii=False)
-
-            body = {
-                "receive_id": chat_id,
-                "msg_type": "text",
-                "content": content,
-            }
+            body = {"receive_id": chat_id, "msg_type": "text", "content": content}
 
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     "https://open.feishu.cn/open-apis/im/v1/messages",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                     params={"receive_id_type": "chat_id"},
                     json=body,
                 )
-
                 if resp.status_code != 200:
-                    logger.error(
-                        "Feishu send failed: HTTP %d — %s",
-                        resp.status_code,
-                        resp.text[:500],
-                    )
-                    return False
+                    logger.error("Feishu send failed: HTTP %d", resp.status_code)
+                    return None
 
                 data = resp.json()
                 if data.get("code", -1) != 0:
-                    logger.error(
-                        "Feishu API error: code=%d msg=%s",
-                        data.get("code"),
-                        data.get("msg", ""),
-                    )
-                    return False
+                    logger.error("Feishu API error: code=%d msg=%s", data.get("code"), data.get("msg", ""))
+                    return None
 
-                logger.info(
-                    "Feishu reply sent: msg_id=%s chat_id=%s",
-                    data.get("data", {}).get("message_id"),
-                    chat_id,
-                )
-                return True
-
+                msg_id = data.get("data", {}).get("message_id")
+                logger.info("Feishu reply sent: msg_id=%s chat_id=%s", msg_id, chat_id)
+                return msg_id
         except Exception as e:
             logger.error("Feishu reply failed: %s", e)
-            return False
+            return None
 
     async def _get_feishu_token(self, app_id: str, app_secret: str) -> str:
-        """Get Feishu tenant_access_token via HTTP.
-
-        In production, add Redis caching for the 2-hour TTL.
-        """
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -154,37 +110,21 @@ class IMSender:
                     json={"app_id": app_id, "app_secret": app_secret},
                 )
                 if resp.status_code != 200:
-                    logger.error("Feishu token request failed: %s", resp.text[:500])
                     return ""
-
                 data = resp.json()
-                code = data.get("code", -1)
-                if code != 0:
-                    logger.error(
-                        "Feishu token API error: code=%d msg=%s",
-                        code,
-                        data.get("msg", ""),
-                    )
+                if data.get("code", -1) != 0:
                     return ""
-
-                token = data.get("tenant_access_token", "")
-                if not token:
-                    logger.error("Feishu token API returned empty token")
-                return token
-
-        except Exception as e:
-            logger.error("Feishu token request failed: %s", e)
+                return data.get("tenant_access_token", "")
+        except Exception:
             return ""
 
-    # ── DingTalk reply ──
+    # ── DingTalk / WeCom / Slack ──
 
-    async def _reply_dingtalk(self, user_id: str, text: str) -> bool:
+    async def _reply_dingtalk(self, user_id: str, text: str) -> str | None:
         cfg = self.configs.get("dingtalk", {})
         access_token = cfg.get("access_token", "")
         if not access_token:
-            logger.warning("DingTalk not configured for sending")
-            return False
-
+            return None
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -192,40 +132,32 @@ class IMSender:
                     params={"access_token": access_token},
                     json={"msgtype": "text", "text": {"content": text}},
                 )
-                return resp.status_code == 200
+                return "dingtalk-ok" if resp.status_code == 200 else None
         except Exception as e:
             logger.error("DingTalk reply failed: %s", e)
-            return False
+            return None
 
-    # ── WeChat Work reply ──
-
-    async def _reply_wecom(self, text: str, normalized: dict) -> bool:
+    async def _reply_wecom(self, text: str, normalized: dict) -> str | None:
         cfg = self.configs.get("wecom", {})
         webhook_url = cfg.get("webhook_url", "")
         if not webhook_url:
-            logger.warning("WeCom not configured for sending")
-            return False
-
+            return None
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
                     webhook_url,
                     json={"msgtype": "text", "text": {"content": text}},
                 )
-                return resp.status_code == 200
+                return "wecom-ok" if resp.status_code == 200 else None
         except Exception as e:
             logger.error("WeCom reply failed: %s", e)
-            return False
+            return None
 
-    # ── Slack reply ──
-
-    async def _reply_slack(self, channel: str, text: str) -> bool:
+    async def _reply_slack(self, channel: str, text: str) -> str | None:
         cfg = self.configs.get("slack", {})
         bot_token = cfg.get("bot_token", "")
         if not bot_token:
-            logger.warning("Slack not configured for sending")
-            return False
-
+            return None
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -233,17 +165,12 @@ class IMSender:
                     headers={"Authorization": f"Bearer {bot_token}"},
                     json={"channel": channel, "text": text},
                 )
-                ok = resp.status_code == 200 and resp.json().get("ok", False)
-                if not ok:
-                    logger.error("Slack reply failed: %s", resp.text[:500])
-                return ok
+                data = resp.json()
+                return data.get("ts") if resp.status_code == 200 and data.get("ok") else None
         except Exception as e:
             logger.error("Slack reply failed: %s", e)
-            return False
+            return None
 
-    # ── Generic notification (for webhook dispatcher) ──
-
-    async def send_notification(self, platform: str, channel_id: str, text: str) -> bool:
-        """Send a notification to a channel (for push-style alerts, not reply-to-message)."""
+    async def send_notification(self, platform: str, channel_id: str, text: str) -> str | None:
         dummy = {"platform": platform, "channel_id": channel_id, "user_id": "", "msg_id": ""}
         return await self.reply(platform, dummy, text)

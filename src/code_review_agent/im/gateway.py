@@ -116,15 +116,29 @@ class IMGateway:
             logger.exception("Action dispatch failed for intent %s", intent)
             response_text = f"Sorry, something went wrong: {e}"
 
-        # ── Persist response to message chain ──
-        reply_msg_id: Optional[str] = None
-        if self.store and msg_id:
+        # ── Update session ──
+        session.history.append({"role": "user", "content": text})
+        session.history.append({"role": "assistant", "content": response_text})
+        if len(session.history) > 20:
+            session.history = session.history[-20:]
+        await self.conversations.save(session)
+
+        # ── Send reply FIRST to get the real Feishu message_id ──
+        real_reply_id: Optional[str] = None
+        try:
+            real_reply_id = await self.sender.reply(platform, normalized, response_text)
+            logger.info(">>> GATEWAY: reply sent id=%s", real_reply_id)
+        except Exception as e:
+            logger.error("Failed to send reply to %s: %s", platform, e)
+
+        # ── Persist to message chain with REAL message_id as key ──
+        if self.store and msg_id and real_reply_id:
             reply_role = "review" if intent and intent.value in ("review_pr", "review_commit", "review_branch") else "assistant"
-            reply_msg_id = f"{msg_id}-reply"  # placeholder, will be updated
+            chain_root = root_id or msg_id
             self.store.save_message(
-                message_id=reply_msg_id,
+                message_id=real_reply_id,
                 session_id=session_id,
-                root_id=root_id or msg_id,
+                root_id=chain_root,
                 parent_id=msg_id,
                 role=reply_role,
                 source_type="bot_reply",
@@ -134,19 +148,5 @@ class IMGateway:
                     "intent": intent.value if intent else "unknown",
                 },
             )
-
-        # ── Update session ──
-        session.history.append({"role": "user", "content": text})
-        session.history.append({"role": "assistant", "content": response_text})
-        if len(session.history) > 20:
-            session.history = session.history[-20:]
-        await self.conversations.save(session)
-
-        # ── Send reply ──
-        try:
-            ok = await self.sender.reply(platform, normalized, response_text)
-            logger.info(">>> GATEWAY: reply sent ok=%s", ok)
-        except Exception as e:
-            logger.error("Failed to send reply to %s: %s", platform, e)
 
         return {"status": "ok", "intent": intent.value if intent else "unknown"}
