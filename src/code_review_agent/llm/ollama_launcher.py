@@ -25,11 +25,13 @@ async def ensure_ollama(llm_config: dict) -> bool:
         return False
 
     base_url = ollama_cfg.get("base_url", OLLAMA_BASE)
+    # Strip trailing /v1 if present (that's for OpenAI-compatible API, not Ollama native)
+    native_url = base_url.rstrip("/").removesuffix("/v1")
 
     # Already running?
     try:
         async with httpx.AsyncClient(timeout=3) as client:
-            resp = await client.get(f"{base_url}/api/tags")
+            resp = await client.get(f"{native_url}/api/tags")
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 logger.info("Ollama running: %d models loaded", len(models))
