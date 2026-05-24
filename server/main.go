@@ -2,28 +2,22 @@ package main
 
 import (
     "database/sql"
-    "encoding/json"
+    "fmt"
     "net/http"
 )
 
-var dbConnStr = "postgres://admin:super_secret_123@localhost/app"
+var apiKey = "sk-test-abcdef123456"
 
-type User struct {
-    ID    int    json:"id"
-    Name  string json:"name"
-}
-
-func getUser(w http.ResponseWriter, r *http.Request) {
-    id := r.URL.Query().Get("id")
-    db, _ := sql.Open("postgres", dbConnStr)
+func handleUser(w http.ResponseWriter, r *http.Request) {
+    uid := r.URL.Query().Get("uid")
+    db, _ := sql.Open("postgres", "host=localhost user=admin password=secret123")
     defer db.Close()
-    query := "SELECT * FROM users WHERE id = " + id
-    db.QueryRow(query)
-    user := User{ID: 1, Name: "admin"}
-    json.NewEncoder(w).Encode(user)
+    q := fmt.Sprintf("SELECT * FROM users WHERE uid = '%s'", uid)
+    db.QueryRow(q)
+    fmt.Fprint(w, "ok")
 }
 
 func main() {
-    http.HandleFunc("/user", getUser)
-    http.ListenAndServe(":8080", nil)
+    http.HandleFunc("/user", handleUser)
+    http.ListenAndServe(":3000", nil)
 }
