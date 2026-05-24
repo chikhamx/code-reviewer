@@ -38,9 +38,12 @@ async def ensure_ollama(llm_config: dict) -> bool:
     base_url = ollama_cfg.get("base_url", OLLAMA_HOST)
     native_url = base_url.rstrip("/").removesuffix("/v1")
 
-    # Already running?
+    # Already running? (only 200 counts, 502 etc. means something else on the port)
     if await _check_ollama(native_url):
         return True
+
+    # Kill any stale process on the Ollama port
+    _kill_port(11434)
 
     # Find or install ollama binary (download runs in background thread)
     ollama_bin = _find_ollama()
@@ -48,9 +51,6 @@ async def ensure_ollama(llm_config: dict) -> bool:
         logger.info("Ollama not found, starting background download to %s ...", TOOLS_DIR)
         threading.Thread(target=_install_ollama_sync, name="ollama-install", daemon=True).start()
         logger.info("Ollama download started in background — will be ready next restart")
-        return False
-    if not ollama_bin:
-        logger.warning("Ollama unavailable — intent classification will use remote LLM")
         return False
 
     # Ensure OLLAMA_MODELS is set to project dir
@@ -161,6 +161,26 @@ async def _pull_models(ollama_bin: str, ollama_cfg: dict) -> None:
             )
         except Exception as e:
             logger.warning("Failed to pull model %s: %s", model_id, e)
+
+
+def _kill_port(port: int) -> None:
+    """Kill any process listening on the given port (Windows only)."""
+    if os.name != "nt":
+        return
+    try:
+        out = subprocess.check_output(
+            f'netstat -ano | findstr ":{port}" | findstr "LISTENING"',
+            shell=True, text=True,
+        )
+        for line in out.strip().split("\n"):
+            parts = line.strip().split()
+            if len(parts) >= 5 and parts[1].endswith(f":{port}"):
+                pid = parts[-1]
+                subprocess.run(["TASKKILL", "/F", "/PID", pid],
+                               capture_output=True)
+                logger.info("Killed PID %s on port %d", pid, port)
+    except Exception:
+        pass
 
 
 def _find_ollama() -> str | None:
