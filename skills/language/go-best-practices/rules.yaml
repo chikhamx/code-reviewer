@@ -30,3 +30,27 @@ rules:
     message: "sync.Mutex should not be copied; use pointer receiver"
     suggestion: "Ensure mutex fields are used via pointer"
     files: "*.go"
+
+  - id: go-goroutine-leak
+    pattern: "go\\s+func\\s*\\([^)]*\\)\\s*\\{"
+    severity: warning
+    category: bug_risk
+    message: "Goroutine started without context or cancellation — potential leak"
+    suggestion: "Pass context.Context to goroutines and use select with ctx.Done() for graceful shutdown."
+    files: "*.go"
+
+  - id: go-context-not-propagated
+    pattern: "func\\s+\\w+\\s*\\([^)]*\\)\\s*[^{]*\\{"
+    severity: info
+    category: maintainability
+    message: "Public function without context.Context parameter"
+    suggestion: "Accept context.Context as the first parameter for cancellation and deadline support."
+    files: "*.go"
+
+  - id: go-nil-pointer
+    pattern: "\\w+\\.\\w+"
+    severity: warning
+    category: bug_risk
+    message: "Potential nil pointer dereference"
+    suggestion: "Check for nil before dereferencing, or return an error if the value is unexpectedly nil."
+    files: "*.go"

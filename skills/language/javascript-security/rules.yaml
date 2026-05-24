@@ -1,0 +1,40 @@
+rules:
+  - id: js-innerhtml-xss
+    pattern: "\\.innerHTML\\s*="
+    severity: critical
+    category: security
+    message: "innerHTML assignment — Cross-Site Scripting (XSS) vulnerability"
+    suggestion: "Use textContent, createElement, or sanitize with DOMPurify before assigning to innerHTML."
+    files: "*.js,*.ts"
+
+  - id: js-eval
+    pattern: "\\beval\\s*\\("
+    severity: critical
+    category: security
+    message: "eval() with user-controlled input — arbitrary code execution"
+    suggestion: "Never use eval(). Use JSON.parse() for data, or a safe expression evaluator if absolutely needed."
+    files: "*.js,*.ts"
+
+  - id: js-document-write
+    pattern: "document\\.write\\s*\\("
+    severity: error
+    category: security
+    message: "document.write() — can be used for XSS and blocks page rendering"
+    suggestion: "Use DOM manipulation methods (createElement, appendChild) instead."
+    files: "*.js,*.ts"
+
+  - id: js-no-csrf-protection
+    pattern: "fetch\\([^)]*method\\s*:\\s*['\"](POST|PUT|DELETE|PATCH)"
+    severity: warning
+    category: security
+    message: "Fetch request without CSRF token in headers"
+    suggestion: "Include X-CSRF-Token or Authorization header for state-changing requests."
+    files: "*.js,*.ts"
+
+  - id: js-console-log-sensitive
+    pattern: "console\\.(log|debug|info)\\s*\\([^)]*\\b(token|password|secret|key|credential|auth)\\b"
+    severity: error
+    category: security
+    message: "Sensitive data may be leaked to browser console"
+    suggestion: "Remove debug logging of sensitive values before committing."
+    files: "*.js,*.ts"

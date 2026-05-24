@@ -1,0 +1,32 @@
+rules:
+  - id: global-bare-except
+    pattern: "except\\s*:"
+    severity: warning
+    category: bug_risk
+    message: "Bare except clause catches too broadly (including KeyboardInterrupt)"
+    suggestion: "Specify the exception type(s) to catch. Use 'except Exception:' at minimum."
+    files: "*.py"
+
+  - id: global-empty-catch
+    pattern: "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}"
+    severity: warning
+    category: bug_risk
+    message: "Empty catch block silently swallows errors"
+    suggestion: "At minimum, log the error. Consider whether the error should be propagated instead."
+    files: "*.js,*.ts,*.java,*.go,*.cpp,*.cs"
+
+  - id: global-swallowed-exception
+    pattern: "(except|catch).*:\\s*\\n\\s*(pass|return\\s+None|return\\s+null)"
+    severity: error
+    category: bug_risk
+    message: "Exception caught and silently ignored with pass/return None"
+    suggestion: "Log the exception details before ignoring, or re-raise if the error is unexpected."
+    files: "*.py,*.js,*.ts,*.java"
+
+  - id: global-generic-exception
+    pattern: "(raise|throw)\\s+(Exception|Error|RuntimeException)\\s*[\\(;]"
+    severity: warning
+    category: maintainability
+    message: "Generic exception raised without specific type"
+    suggestion: "Use a more specific exception type that describes the actual error condition."
+    files: "*.py,*.js,*.ts,*.java,*.go,*.cpp"

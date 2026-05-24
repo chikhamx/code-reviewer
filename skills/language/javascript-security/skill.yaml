@@ -1,0 +1,6 @@
+name: javascript-security
+description: JavaScript/TypeScript security and best practices
+version: "1.0"
+enabled: true
+languages: [javascript, js, typescript, ts]
+author: Code Review Agent

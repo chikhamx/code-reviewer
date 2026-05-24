@@ -39,3 +39,36 @@ rules:
     message: "DEBUG=True in production-like configuration"
     suggestion: "Set DEBUG=False for production, or use environment variable."
     files: "*.py"
+
+  - id: py-subprocess-shell
+    pattern: "subprocess\\.(call|Popen|run|check_output)\\s*\\([^)]*shell\\s*=\\s*True"
+    severity: critical
+    category: security
+    message: "subprocess with shell=True — command injection risk"
+    suggestion: "Use shell=False (default) and pass arguments as a list. If you must use shell, use shlex.quote()."
+    files: "*.py"
+
+  - id: py-assert-business-logic
+    pattern: "assert\\s+(?!isinstance|type\\()"
+    severity: warning
+    category: bug_risk
+    message: "assert used outside of tests — disabled with python -O"
+    suggestion: "Use explicit if/raise ValueError instead. assert statements are removed when running with -O flag."
+    files: "*.py"
+    skip_tests: true
+
+  - id: py-weak-crypto
+    pattern: "hashlib\\.(md5|sha1)\\s*\\("
+    severity: error
+    category: security
+    message: "Weak hash algorithm used for security-sensitive context"
+    suggestion: "Use hashlib.sha256() or hashlib.sha3_256() instead. MD5/SHA1 are broken for security purposes."
+    files: "*.py"
+
+  - id: py-tempfile-unsafe
+    pattern: "(tempfile\\.mktemp|os\\.tmpnam)\\s*\\("
+    severity: warning
+    category: security
+    message: "Insecure temporary file creation — race condition risk"
+    suggestion: "Use tempfile.NamedTemporaryFile() or tempfile.mkstemp() instead."
+    files: "*.py"

@@ -1,0 +1,5 @@
+name: common-error-handling
+description: Error handling best practices — applies to ALL projects
+version: "1.0"
+enabled: true
+author: Code Review Agent
