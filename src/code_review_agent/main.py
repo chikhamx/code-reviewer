@@ -31,42 +31,41 @@ def cmd_skill_new(args: list[str]):
     """Scaffold a new skill.
 
     Usage:
-      cr-agent skill new <name> --type global
-      cr-agent skill new <name> --type language --languages py,go
-      cr-agent skill new <name> --type project
+      cr-agent skill new <name> --tier global
+      cr-agent skill new <name> --tier language --languages py,go
+      cr-agent skill new <name> --tier project
     """
     if len(args) < 1:
-        print("Usage: cr-agent skill new <name> [--type global|language|project] [--languages py,go]")
+        print("Usage: cr-agent skill new <name> --tier global|language|project [--languages py,go]")
         sys.exit(1)
 
     name = args[0]
-    skill_type = "language"
+    tier = "language"
     languages: list[str] = ["python"]
     for i, a in enumerate(args):
-        if a == "--type" and i + 1 < len(args):
-            skill_type = args[i + 1]
+        if a == "--tier" and i + 1 < len(args):
+            tier = args[i + 1]
         if a == "--languages" and i + 1 < len(args):
             languages = [l.strip() for l in args[i + 1].split(",")]
 
-    if skill_type not in ("global", "language", "project"):
-        print(f"Invalid type: {skill_type}. Must be global, language, or project.")
+    if tier not in ("global", "language", "project"):
+        print(f"Invalid tier: {tier}. Must be global, language, or project.")
         sys.exit(1)
 
-    skill_dir = Path("skills") / name
+    skill_dir = Path("skills") / tier / name
     if skill_dir.exists():
         print(f"Skill '{name}' already exists at {skill_dir}")
         sys.exit(1)
 
     skill_dir.mkdir(parents=True)
 
-    lang_list = ", ".join(languages) if skill_type == "language" else ""
-    lang_line = f"languages: [{lang_list}]\n" if skill_type == "language" else ""
+    lang_list = ", ".join(languages) if tier == "language" else ""
+    lang_line = f"languages: [{lang_list}]\n" if tier == "language" else ""
 
     (skill_dir / "skill.yaml").write_text(
         f"name: {name}\n"
         f"description: Custom review rules for {name}\n"
         f"version: \"1.0\"\n"
-        f"type: {skill_type}\n"
         f"enabled: true\n"
         f"{lang_line}"
         f"author: Your Name\n",
@@ -113,9 +112,9 @@ def cmd_skill_list():
 
     from code_review_agent.skills.loader import SkillLoader
     loader = SkillLoader("skills")
-    loader.load_global()  # trigger lazy load
+    loader.get_global_rules()  # trigger lazy load
 
-    all_skills = loader.global_skills + loader.language_skills
+    all_skills = loader.get_all_skills()
     if not all_skills:
         print("No skills loaded.")
         return
@@ -125,7 +124,7 @@ def cmd_skill_list():
         rules_n = len(s.rules)
         prompt = "md" if s.review_prompt else "-"
         langs = ", ".join(s.languages) if s.languages else "all"
-        print(f"  {status} {s.name:30s} [{s.skill_type.value:8s}] {rules_n:2d} rules  review={prompt}  langs={langs}")
+        print(f"  {status} [{s.tier:8s}] {s.name:30s} {rules_n:2d} rules  review={prompt}  langs={langs}")
 
 
 def main():
@@ -151,9 +150,14 @@ def main():
             print("Code Review Agent")
             print()
             print("Usage:")
-            print("  cr-agent                  Start the server")
-            print("  cr-agent skill new <name> Scaffold a new skill")
-            print("  cr-agent skill list       List installed skills")
+            print("  cr-agent                               Start the server")
+            print("  cr-agent skill new <name> --tier <t>   Scaffold a skill")
+            print("  cr-agent skill list                    List installed skills")
+            print()
+            print("Skill tiers:")
+            print("  global    Always loaded, applies to all projects")
+            print("  language  Loaded per-review based on PR file languages")
+            print("  project   User-defined per-project skills")
             return
 
     config = get_config()

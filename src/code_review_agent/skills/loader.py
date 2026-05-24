@@ -1,24 +1,34 @@
-"""Skill loader with three-tier system.
+"""Skill loader with directory-based three-tier system.
 
-Tier 1 — Global (type: global):
-    Universal rules that apply to ALL projects. Loaded once at bootstrap.
+Tiers are determined by the parent directory under skills/:
 
-Tier 2 — Language (type: language):
-    Rules scoped to specific languages (Python, Go, etc.). Loaded per review
-    based on detected file languages in the PR.
-
-Tier 3 — Project (type: project):
-    Rules from the repo's .code-review/ directory. Loaded dynamically during
-    review from the PR's head branch.
+    skills/
+      global/           ← Tier 1: always loaded, applies to ALL projects
+        common-security/
+          skill.yaml
+          rules.yaml
+          review.md
+      language/         ← Tier 2: loaded per-review based on PR file languages
+        python-security/
+          skill.yaml
+          rules.yaml
+          review.md
+        go-best-practices/
+          skill.yaml
+          rules.yaml
+      project/          ← Tier 3: user-defined per-project skills
+        my-project/
+          skill.yaml
+          rules.yaml
+          review.md
 
 Each skill directory:
-    skill.yaml     # metadata (name, type, languages, enabled)
-    rules.yaml     # structured regex rules (optional)
-    review.md      # LLM review guidelines (optional, markdown)
+    skill.yaml          # metadata (name, languages, enabled)
+    rules.yaml          # structured regex rules (optional)
+    review.md           # LLM review guidelines (optional, markdown)
 """
 
 import logging
-from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -27,17 +37,12 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-class SkillType(str, Enum):
-    GLOBAL = "global"
-    LANGUAGE = "language"
-    PROJECT = "project"
-
-
 class Skill:
     """A loaded skill with metadata, rules, and optional review prompt."""
 
-    def __init__(self, name: str, path: Path, metadata: dict):
+    def __init__(self, name: str, tier: str, path: Path, metadata: dict):
         self.name = name
+        self.tier = tier  # "global" | "language" | "project"
         self.path = path
         self.metadata = metadata
         self.rules: list[dict] = []
@@ -48,44 +53,32 @@ class Skill:
         return self.metadata.get("enabled", True)
 
     @property
-    def skill_type(self) -> SkillType:
-        raw = self.metadata.get("type", "language")
-        try:
-            return SkillType(raw)
-        except ValueError:
-            logger.warning("Unknown skill type '%s' in %s, fallback to language", raw, self.name)
-            return SkillType.LANGUAGE
-
-    @property
     def languages(self) -> list[str]:
         return self.metadata.get("languages", [])
 
 
 class SkillLoader:
-    """Loads skills from the skills/ directory."""
+    """Loads skills from the skills/ directory using directory-based tiers."""
 
     def __init__(self, skills_dir: str = "skills"):
         self.skills_dir = Path(skills_dir)
         self.global_skills: list[Skill] = []
         self.language_skills: list[Skill] = []
-        self._all_loaded = False
+        self.project_skills: list[Skill] = []
+        self._loaded = False
 
     # ── Discovery ──
 
-    def discover(self) -> list[Path]:
-        if not self.skills_dir.exists():
+    def _discover_in(self, tier: str) -> list[Path]:
+        tier_dir = self.skills_dir / tier
+        if not tier_dir.exists():
             return []
         return sorted(
-            d for d in self.skills_dir.iterdir()
+            d for d in tier_dir.iterdir()
             if d.is_dir() and (d / "skill.yaml").exists()
         )
 
-    # ── Tier 1: Global (bootstrap time) ──
-
-    def load_global(self) -> list[Skill]:
-        """Load all type=global skills. Call once at bootstrap."""
-        self._ensure_loaded()
-        return self.global_skills
+    # ── Tier 1: Global ──
 
     def get_global_rules(self) -> list[dict]:
         self._ensure_loaded()
@@ -96,13 +89,9 @@ class SkillLoader:
 
     def get_global_prompts(self) -> str:
         self._ensure_loaded()
-        prompts: list[str] = []
-        for s in self.global_skills:
-            if s.review_prompt:
-                prompts.append(f"## {s.name}\n{s.review_prompt}")
-        return "\n\n".join(prompts)
+        return _join_prompts(self.global_skills)
 
-    # ── Tier 2: Language-specific (review time) ──
+    # ── Tier 2: Language-specific (for review time) ──
 
     def get_rules_for_languages(self, languages: list[str]) -> list[dict]:
         """Get rules from global + matching language skills."""
@@ -127,11 +116,10 @@ class SkillLoader:
                 prompts.append(f"## {s.name}\n{s.review_prompt}")
         return "\n\n".join(prompts)
 
-    # ── Tier 3: Project (.code-review/ in the reviewed repo) ──
+    # ── Tier 3: Project-level (.code-review/ in reviewed repo) ──
 
     @staticmethod
     def load_project_rules(rules_yaml_text: str) -> list[dict]:
-        """Parse project-level rules.yaml content. Returns list of rule dicts."""
         if not rules_yaml_text.strip():
             return []
         try:
@@ -143,62 +131,56 @@ class SkillLoader:
 
     @staticmethod
     def load_project_prompt(review_md_text: str) -> str:
-        """Return project-level review.md content."""
         text = review_md_text.strip()
         if not text:
             return ""
         return "## Project Rules (.code-review/)\n" + text
 
-    # ── Access ──
-
-    def get_skill(self, name: str) -> Optional[Skill]:
+    def get_all_skills(self) -> list[Skill]:
         self._ensure_loaded()
-        for s in self.global_skills + self.language_skills:
-            if s.name == name:
-                return s
-        return None
+        return self.global_skills + self.language_skills + self.project_skills
 
     # ── Internal ──
 
     def _ensure_loaded(self):
-        if self._all_loaded:
+        if self._loaded:
             return
-        for skill_dir in self.discover():
-            skill = self._load_skill(skill_dir)
-            if not skill or not skill.enabled:
-                if skill:
-                    logger.info("Skill skipped (disabled): %s", skill.name)
-                continue
+        for tier in ("global", "language", "project"):
+            for skill_dir in self._discover_in(tier):
+                skill = self._load_skill(tier, skill_dir)
+                if not skill or not skill.enabled:
+                    if skill:
+                        logger.info("Skill skipped (disabled): %s/%s", tier, skill.name)
+                    continue
 
-            if skill.skill_type == SkillType.GLOBAL:
-                self.global_skills.append(skill)
-            else:
-                # language and any unknown types go to language tier
-                self.language_skills.append(skill)
+                target = (
+                    self.global_skills if tier == "global"
+                    else self.language_skills if tier == "language"
+                    else self.project_skills
+                )
+                target.append(skill)
 
-            parts = [f"type={skill.skill_type.value}", f"{len(skill.rules)} rules"]
-            if skill.review_prompt:
-                parts.append(f"review.md ({len(skill.review_prompt)} chars)")
-            logger.info(
-                "Skill loaded: %s (%s)",
-                skill.name,
-                ", ".join(parts),
-            )
-        self._all_loaded = True
+                parts = [f"{len(skill.rules)} rules"]
+                if skill.review_prompt:
+                    parts.append(f"review.md ({len(skill.review_prompt)} chars)")
+                if skill.languages:
+                    parts.append(f"langs={skill.languages}")
+                logger.info(
+                    "Skill loaded: [%s] %s (%s)",
+                    tier, skill.name, ", ".join(parts),
+                )
+        self._loaded = True
 
-    def _load_skill(self, skill_dir: Path) -> Optional[Skill]:
+    def _load_skill(self, tier: str, skill_dir: Path) -> Optional[Skill]:
         manifest = self._read_yaml(skill_dir / "skill.yaml")
         if not manifest:
             return None
-
         name = manifest.get("name", skill_dir.name)
-        skill = Skill(name=name, path=skill_dir, metadata=manifest)
-
+        skill = Skill(name=name, tier=tier, path=skill_dir, metadata=manifest)
         rules_data = self._read_yaml(skill_dir / "rules.yaml")
         if rules_data:
             skill.rules = rules_data.get("rules", [])
             self._validate_rules(skill.rules, skill.name)
-
         skill.review_prompt = self._read_text(skill_dir / "review.md")
         return skill
 
@@ -241,3 +223,11 @@ def _language_match(skill_langs: list[str], target_langs: list[str]) -> bool:
     skill_set = set(s.lower() for s in skill_langs)
     target_set = set(t.lower() for t in target_langs)
     return bool(skill_set & target_set)
+
+
+def _join_prompts(skills: list[Skill]) -> str:
+    prompts: list[str] = []
+    for s in skills:
+        if s.review_prompt:
+            prompts.append(f"## {s.name}\n{s.review_prompt}")
+    return "\n\n".join(prompts)
