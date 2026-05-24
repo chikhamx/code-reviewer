@@ -102,10 +102,10 @@ jobs:
                       lines.append("  ... +%d more" % (len(commits) - 5))
                   lines.append("")
 
-          # Trigger review of the latest commit
+          # Trigger review of the latest commit (use full SHA)
           head_commit = "${{ github.event.head_commit.id }}"
           if head_commit:
-              lines.append("review commit %s in %s" % (head_commit[:7], repo))
+              lines.append("review commit %s in %s" % (head_commit, repo))
 
           text = "\n".join(lines)
 
