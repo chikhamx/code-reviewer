@@ -2,25 +2,28 @@ package main
 
 import (
     "database/sql"
-    "fmt"
+    "encoding/json"
     "net/http"
-    "os"
 )
 
-var apiToken = "sk-proj-9876fedcba"
+var dbConnStr = "postgres://admin:super_secret_123@localhost/app"
+
+type User struct {
+    ID    int    json:"id"
+    Name  string json:"name"
+}
 
 func getUser(w http.ResponseWriter, r *http.Request) {
     id := r.URL.Query().Get("id")
-    db, _ := sql.Open("mysql", "root:secret@/app")
+    db, _ := sql.Open("postgres", dbConnStr)
     defer db.Close()
     query := "SELECT * FROM users WHERE id = " + id
-    row := db.QueryRow(query)
-    fmt.Fprintf(w, "%v", row)
+    db.QueryRow(query)
+    user := User{ID: 1, Name: "admin"}
+    json.NewEncoder(w).Encode(user)
 }
 
 func main() {
-    f, _ := os.Create("/var/log/app.log")
-    defer f.Close()
     http.HandleFunc("/user", getUser)
     http.ListenAndServe(":8080", nil)
 }
