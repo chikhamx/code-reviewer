@@ -1,31 +1,9 @@
 import logging
-import sys
 import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-
-def _setup_logging():
-    """Configure detailed logging for the Code Review Agent."""
-    fmt = "%(asctime)s [%(levelname)s] %(name)s | %(message)s"
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(fmt, datefmt="%H:%M:%S"))
-
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-    # Remove existing handlers to avoid duplicate output
-    root.handlers.clear()
-    root.addHandler(handler)
-
-    # Keep noisy libraries at INFO
-    for lib in ("httpx", "httpcore", "urllib3", "asyncio", "lark_oapi.core"):
-        logging.getLogger(lib).setLevel(logging.INFO)
-    # uvicorn has its own log config, don't double-log
-    logging.getLogger("uvicorn").propagate = False
-
-
-_setup_logging()
 logger = logging.getLogger(__name__)
 
 from code_review_agent.api.health import router as health_router

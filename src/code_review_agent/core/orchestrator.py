@@ -24,7 +24,13 @@ class Orchestrator:
         self.llm_reviewer = LLMReviewer(router, fallback)
         self.rule_engine = rule_engine or RuleEngine()
 
-    async def review(self, pr_context: PRContext, diff_text: str) -> ReviewResult:
+    async def review(
+        self,
+        pr_context: PRContext,
+        diff_text: str,
+        skill_prompts: str = "",
+        custom_rules: list[dict] | None = None,
+    ) -> ReviewResult:
         start = time.monotonic()
 
         result = ReviewResult(
@@ -42,16 +48,28 @@ class Orchestrator:
         rule_findings: list[Finding] = []
 
         try:
-            llm_findings = await self.llm_reviewer.review(diff_text, {
-                "title": pr_context.title,
-                "description": pr_context.description,
-                "branch": pr_context.branch,
-            })
+            llm_findings = await self.llm_reviewer.review(
+                diff_text,
+                {
+                    "title": pr_context.title,
+                    "description": pr_context.description,
+                    "branch": pr_context.branch,
+                },
+                skill_prompts=skill_prompts,
+            )
         except Exception as e:
             logger.error("LLM review failed: %s", e)
 
         try:
+            # Add language-specific rules for this review, then remove them
+            temp_rules = custom_rules or []
+            for r in temp_rules:
+                self.rule_engine.add_rule(r)
             rule_findings = self.rule_engine.check(pr_context.files)
+            for r in temp_rules:
+                rid = r.get("id", "")
+                if rid:
+                    self.rule_engine.remove_rule(rid)
         except Exception as e:
             logger.error("Rule engine failed: %s", e)
 

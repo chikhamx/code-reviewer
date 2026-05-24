@@ -49,6 +49,7 @@ class AppContext:
         self.platform_commenter = None
         self.feishu_api: object = None  # FeishuSDKClient
         self.feishu_ws: object = None   # FeishuWSListener
+        self.skill_loader: object = None  # SkillLoader
 
 
 _ctx = AppContext()
@@ -91,7 +92,19 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
     # ── 3. Rule Engine ──
     from code_review_agent.reviewers.rule_engine import RuleEngine
     ctx.rule_engine = RuleEngine()
-    logger.info("Rule engine initialized with %d rules", len(ctx.rule_engine.rules))
+
+    # Load custom skills from skills/ directory
+    # Tier 1 (global): always loaded. Tier 2 (language): loaded per-review.
+    from code_review_agent.skills.loader import SkillLoader
+    ctx.skill_loader = SkillLoader("skills")
+    global_rules = ctx.skill_loader.get_global_rules()
+    for rule in global_rules:
+        ctx.rule_engine.add_rule(rule)
+    logger.info(
+        "Rule engine: %d built-in + %d global skill rules loaded",
+        len(ctx.rule_engine.rules) - len(global_rules),
+        len(global_rules),
+    )
 
     # ── 4. Orchestrator ──
     from code_review_agent.core.orchestrator import Orchestrator
@@ -154,6 +167,7 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
         llm_router=ctx.model_router,
         github_client=ctx.github_client,
         gitlab_client=ctx.gitlab_client,
+        skill_loader=ctx.skill_loader,
     ))
     ctx.action_dispatcher.register(Intent.REVIEW_BRANCH, ReviewBranchAction())
     ctx.action_dispatcher.register(Intent.REVIEW_COMMIT, ReviewCommitAction())
@@ -287,5 +301,6 @@ def attach_to_app(app):
     app.state.platform_commenter = ctx.platform_commenter
     app.state.feishu_api = ctx.feishu_api
     app.state.feishu_ws = ctx.feishu_ws
+    app.state.skill_loader = ctx.skill_loader
 
     logger.info("App context attached to FastAPI state")

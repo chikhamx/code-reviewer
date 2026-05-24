@@ -1,0 +1,41 @@
+# Custom security rules for Python code review
+rules:
+  - id: py-unsafe-yaml
+    pattern: "yaml\\.load\\s*\\("
+    severity: critical
+    category: security
+    message: "Unsafe YAML loading — can execute arbitrary code"
+    suggestion: "Use yaml.safe_load() instead of yaml.load()"
+    files: "*.py"
+
+  - id: py-unsafe-pickle
+    pattern: "pickle\\.(load|loads)\\s*\\("
+    severity: critical
+    category: security
+    message: "Unsafe pickle deserialization — can execute arbitrary code"
+    suggestion: "Do not unpickle untrusted data. Use JSON or a safer serialization format."
+    files: "*.py"
+
+  - id: py-eval-exec
+    pattern: "\\b(eval|exec)\\s*\\("
+    severity: critical
+    category: security
+    message: "Use of eval() or exec() — arbitrary code execution risk"
+    suggestion: "Avoid eval/exec entirely. Use safe alternatives like ast.literal_eval() if needed."
+    files: "*.py"
+
+  - id: py-request-without-timeout
+    pattern: "requests\\.(get|post|put|delete|patch)\\s*\\([^)]*?\\)"
+    severity: warning
+    category: bug_risk
+    message: "HTTP request without timeout parameter — may hang indefinitely"
+    suggestion: "Add timeout=30 (or appropriate value) to all requests calls."
+    files: "*.py"
+
+  - id: py-debug-true
+    pattern: "DEBUG\\s*=\\s*True"
+    severity: error
+    category: security
+    message: "DEBUG=True in production-like configuration"
+    suggestion: "Set DEBUG=False for production, or use environment variable."
+    files: "*.py"

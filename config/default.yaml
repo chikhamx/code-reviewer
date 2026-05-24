@@ -2,9 +2,9 @@
 # All values can be overridden via environment variables prefixed with CR_
 
 server:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 8000
-  workers: 4
+  workers: 1
 
 # GitHub App or Personal Access Token
 github:

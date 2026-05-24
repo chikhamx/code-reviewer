@@ -20,8 +20,9 @@ class LLMReviewer:
         self,
         diff_text: str,
         pr_context: dict | None = None,
+        skill_prompts: str = "",
     ) -> list[Finding]:
-        system, user = build_review_prompt(diff_text, pr_context)
+        system, user = build_review_prompt(diff_text, pr_context, skill_prompts)
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},

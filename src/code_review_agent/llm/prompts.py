@@ -47,9 +47,21 @@ User message: {message}
 Intent:"""
 
 
-def build_review_prompt(diff_content: str, pr_context: dict | None = None) -> tuple[str, str]:
-    """Build system and user prompts for code review."""
+def build_review_prompt(
+    diff_content: str,
+    pr_context: dict | None = None,
+    skill_prompts: str = "",
+) -> tuple[str, str]:
+    """Build system and user prompts for code review.
+
+    Args:
+        diff_content: The diff text to review.
+        pr_context: Optional PR metadata (title, description, branch).
+        skill_prompts: Additional review guidelines from skills and .code-review/.
+    """
     system = REVIEW_SYSTEM_PROMPT
+    if skill_prompts:
+        system += f"\n\n## Project-Specific Review Guidelines\n{skill_prompts}"
 
     context_parts = []
     if pr_context:

@@ -1,0 +1,32 @@
+rules:
+  - id: go-error-not-checked
+    pattern: "^(\\s*)([\\w.]+)\\(.*\\)\\s*$"
+    severity: warning
+    category: bug_risk
+    message: "Function returning error but error not checked"
+    suggestion: "Always check returned errors: if err != nil { return err }"
+    files: "*.go"
+
+  - id: go-defer-close-no-error-check
+    pattern: "defer\\s+\\w+\\.Close\\(\\)"
+    severity: warning
+    category: bug_risk
+    message: "defer Close() without checking error — resource leak may go unnoticed"
+    suggestion: "Use defer func() { if err := f.Close(); err != nil { ... } }() pattern"
+    files: "*.go"
+
+  - id: go-println
+    pattern: "\\b(fmt\\.Println|fmt\\.Printf)\\s*\\("
+    severity: info
+    category: maintainability
+    message: "Using fmt.Println/Printf — consider using structured logging"
+    suggestion: "Use log.Printf or a structured logging library instead"
+    files: "*.go"
+
+  - id: go-mutex-copy
+    pattern: "\\bsync\\.Mutex\\b"
+    severity: warning
+    category: bug_risk
+    message: "sync.Mutex should not be copied; use pointer receiver"
+    suggestion: "Ensure mutex fields are used via pointer"
+    files: "*.go"

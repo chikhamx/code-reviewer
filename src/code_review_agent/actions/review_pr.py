@@ -5,11 +5,12 @@ from code_review_agent.router.intent_router import IntentRouter
 class ReviewPRAction(BaseAction):
     name = "review_pr"
 
-    def __init__(self, core_engine, llm_router, github_client=None, gitlab_client=None):
+    def __init__(self, core_engine, llm_router, github_client=None, gitlab_client=None, skill_loader=None):
         self.core_engine = core_engine
         self.llm_router = llm_router
         self.github = github_client
         self.gitlab = gitlab_client
+        self.skill_loader = skill_loader
 
     async def execute(self, normalized: dict, session) -> str:
         text = normalized.get("text", "")
@@ -47,9 +48,30 @@ class ReviewPRAction(BaseAction):
         if self.github:
             try:
                 pr_ctx = self.github.get_pr_context(repo_name, pr_number)
+
+                # Collect skill rules and prompts based on file languages
+                skill_prompts = ""
+                lang_rules: list[dict] = []
+                if self.skill_loader:
+                    langs = self._detect_languages(pr_ctx.files)
+                    # Tier 1+2: global + language-specific prompts
+                    skill_prompts = self.skill_loader.get_prompts_for_languages(langs)
+                    # Tier 2: language-specific rules
+                    lang_rules = self.skill_loader.get_rules_for_languages(langs)
+
+                    # Tier 3: project-local .code-review/ from the PR's repo
+                    local_prompts, local_rules = await self._load_project_config(
+                        repo_name, pr_ctx.branch
+                    )
+                    if local_prompts:
+                        skill_prompts += "\n\n" + local_prompts
+                    lang_rules.extend(local_rules)
+
                 from code_review_agent.core.diff_parser import DiffParser
                 diff_text = DiffParser().diff_to_text(pr_ctx.files)
-                result = await self.core_engine.review(pr_ctx, diff_text)
+                result = await self.core_engine.review(
+                    pr_ctx, diff_text, skill_prompts, custom_rules=lang_rules,
+                )
                 return (
                     f"🔍 Reviewing PR #{pr_number} in {repo_name}...\n\n"
                     + self._format_result(result)
@@ -82,6 +104,53 @@ class ReviewPRAction(BaseAction):
         if m:
             return m.group(1), int(m.group(2))
         return None
+
+    async def _load_project_config(self, repo_name: str, branch: str) -> tuple[str, list[dict]]:
+        """Try to load .code-review/review.md and rules.yaml from the PR repo."""
+        if not self.github or not self.skill_loader:
+            return "", []
+        prompt = ""
+        rules: list[dict] = []
+        try:
+            content = self.github.get_file_content(
+                repo_name, ".code-review/review.md", ref=branch
+            )
+            if content:
+                logger.info("Loaded .code-review/review.md from %s", repo_name)
+                prompt = self.skill_loader.load_project_prompt(content)
+        except Exception:
+            pass
+        try:
+            content = self.github.get_file_content(
+                repo_name, ".code-review/rules.yaml", ref=branch
+            )
+            if content:
+                rules = self.skill_loader.load_project_rules(content)
+                logger.info("Loaded .code-review/rules.yaml from %s (%d rules)", repo_name, len(rules))
+        except Exception:
+            pass
+        return prompt, rules
+
+    @staticmethod
+    def _detect_languages(files) -> list[str]:
+        """Detect programming languages from file extensions in the PR."""
+        ext_map = {
+            ".py": "python", ".js": "javascript", ".ts": "typescript",
+            ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin",
+            ".c": "c", ".cpp": "cpp", ".h": "c",
+            ".rb": "ruby", ".php": "php", ".swift": "swift",
+            ".yaml": "yaml", ".yml": "yaml", ".json": "json",
+            ".tf": "terraform", ".sh": "shell", ".sql": "sql",
+            ".md": "markdown", ".css": "css", ".html": "html",
+        }
+        exts = set()
+        for f in files:
+            path = getattr(f, "path", "") if hasattr(f, "path") else str(f)
+            for ext, lang in ext_map.items():
+                if path.endswith(ext):
+                    exts.add(lang)
+                    break
+        return sorted(exts)
 
     @staticmethod
     def _parse_gitlab_url(url: str) -> tuple[str, int] | None:

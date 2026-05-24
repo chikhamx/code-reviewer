@@ -76,6 +76,21 @@ class GitHubClient:
             except Exception as e:
                 logger.warning("Failed to post comment on %s:%s: %s", finding.file, finding.line, e)
 
+    def get_file_content(self, repo_name: str, path: str, ref: str = "") -> str | None:
+        """Fetch a single file's content from the repo. Returns the decoded text or None."""
+        try:
+            repo = self.client.get_repo(repo_name)
+            kwargs = {"path": path}
+            if ref:
+                kwargs["ref"] = ref
+            content_file = repo.get_contents(**kwargs)
+            if isinstance(content_file, list):
+                content_file = content_file[0]
+            return content_file.decoded_content.decode("utf-8")
+        except Exception as e:
+            logger.debug("Failed to fetch %s from %s: %s", path, repo_name, e)
+            return None
+
     def post_pr_summary(self, repo_name: str, pr_number: int, summary: str) -> None:
         repo = self.client.get_repo(repo_name)
         pr = repo.get_pull(pr_number)

@@ -1,0 +1,24 @@
+rules:
+  - id: global-hardcoded-credentials
+    pattern: "(password|passwd|secret|api_key|apikey|token|access_key)\\s*[:=]\\s*['\"][^'\"]{8,}['\"]"
+    severity: critical
+    category: security
+    message: "Hardcoded credential or secret detected"
+    suggestion: "Use environment variables, secret manager, or vault."
+    files: "*"
+
+  - id: global-http-no-https
+    pattern: "http://(?!localhost|127\\.0\\.0\\.1)[\\w.-]+"
+    severity: error
+    category: security
+    message: "HTTP URL without TLS — use HTTPS for external services"
+    suggestion: "Change http:// to https:// for all non-localhost URLs."
+    files: "*"
+
+  - id: global-debug-log-sensitive
+    pattern: "(log|print|echo|console\\.log)\\s*\\(.*\\b(password|secret|token|key|credential)\\b"
+    severity: error
+    category: security
+    message: "Sensitive data may be logged"
+    suggestion: "Remove sensitive values from log output, or redact them."
+    files: "*"

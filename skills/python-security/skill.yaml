@@ -1,0 +1,7 @@
+name: python-security
+description: Security-focused code review rules for Python projects
+version: "1.0"
+type: language
+enabled: true
+languages: [python, py]
+author: Code Review Agent

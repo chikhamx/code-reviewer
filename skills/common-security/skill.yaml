@@ -1,0 +1,6 @@
+name: common-security
+description: Universal security rules — applies to ALL projects regardless of language
+version: "1.0"
+type: global
+enabled: true
+author: Code Review Agent
