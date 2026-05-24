@@ -2,6 +2,7 @@ import logging
 import re
 
 from code_review_agent.actions.base import BaseAction
+from code_review_agent.actions.utils import detect_languages, format_result
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,6 @@ class ReviewBranchAction(BaseAction):
     async def execute(self, normalized: dict, session) -> str:
         text = normalized.get("text", "")
 
-        # Parse: "review branch <name> in <org/repo>" or "review branch <name>"
         match = re.search(
             r"(?:review|审查)\s*(?:branch|分支)\s+([^\s]+)(?:\s+(?:in|of|for)\s+([\w.-]+/[\w.-]+))?",
             text, re.IGNORECASE,
@@ -40,9 +40,7 @@ class ReviewBranchAction(BaseAction):
         if not self.github:
             return "GitHub client not configured. Set GITHUB_TOKEN."
 
-        # Default: compare against main/master
         base = "main"
-
         session.current_target = f"{repo_name}/compare/{base}...{branch}"
         session.metadata["review_target"] = {"repo": repo_name, "branch": branch}
 
@@ -52,13 +50,19 @@ class ReviewBranchAction(BaseAction):
             if not ctx:
                 return f"Could not compare {base}...{branch} in {repo_name}. Does the branch exist?"
 
-            # Detect languages and collect skill prompts/rules
+            # Skills and prompts
             skill_prompts = ""
             lang_rules: list[dict] = []
             if self.skill_loader:
-                langs = self._detect_languages(ctx.files)
+                langs = detect_languages(ctx.files)
                 skill_prompts = self.skill_loader.get_prompts_for_languages(langs)
                 lang_rules = self.skill_loader.get_rules_for_languages(langs)
+
+                # Tier 3: project-local .code-review/
+                prompt, rules = await self._load_project_config(repo_name, branch)
+                if prompt:
+                    skill_prompts += "\n\n" + prompt
+                lang_rules.extend(rules)
 
             from code_review_agent.core.diff_parser import DiffParser
             diff_text = DiffParser().diff_to_text(ctx.files)
@@ -67,46 +71,27 @@ class ReviewBranchAction(BaseAction):
             return (
                 f"Branch Review: {branch} (vs {base}) in {repo_name}\n"
                 f"**Files changed**: {len(ctx.files)}\n\n"
-                + self._format_result(result)
+                + format_result(result)
             )
         except Exception as e:
             logger.exception("Branch review failed")
             return f"Failed to review branch: {e}"
 
-    def _format_result(self, result) -> str:
-        from code_review_agent.models.review import ReviewResult
-        icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}
-        r: ReviewResult = result
-        lines = [
-            f"## Review: {r.pr_title}",
-            f"**Risk**: {icon.get(r.risk_level, '')} {r.risk_level.upper()}",
-            f"**Findings**: {r.stats.total} issues",
-            "",
-        ]
-        for f in r.findings:
-            lines.append(
-                f"- [{f.severity.value.upper()}] `{f.file}:{f.line}` — {f.message[:100]}"
-            )
-        if r.summary:
-            lines.extend(["", f"**Summary**: {r.summary}"])
-        return "\n".join(lines)
-
-    @staticmethod
-    def _detect_languages(files) -> list[str]:
-        ext_map = {
-            ".py": "python", ".js": "javascript", ".ts": "typescript",
-            ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin",
-            ".c": "c", ".cpp": "cpp", ".h": "c",
-            ".rb": "ruby", ".php": "php", ".swift": "swift",
-            ".yaml": "yaml", ".yml": "yaml", ".json": "json",
-            ".tf": "terraform", ".sh": "shell", ".sql": "sql",
-            ".md": "markdown", ".css": "css", ".html": "html",
-        }
-        exts = set()
-        for f in files:
-            path = getattr(f, "path", "") if hasattr(f, "path") else str(f)
-            for ext, lang in ext_map.items():
-                if path.endswith(ext):
-                    exts.add(lang)
-                    break
-        return sorted(exts)
+    async def _load_project_config(self, repo_name: str, branch: str) -> tuple[str, list[dict]]:
+        if not self.github or not self.skill_loader:
+            return "", []
+        prompt = ""
+        rules: list[dict] = []
+        try:
+            content = self.github.get_file_content(repo_name, ".code-review/review.md", ref=branch)
+            if content:
+                prompt = self.skill_loader.load_project_prompt(content)
+        except Exception:
+            pass
+        try:
+            content = self.github.get_file_content(repo_name, ".code-review/rules.yaml", ref=branch)
+            if content:
+                rules = self.skill_loader.load_project_rules(content)
+        except Exception:
+            pass
+        return prompt, rules
