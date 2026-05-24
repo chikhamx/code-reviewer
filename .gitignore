@@ -31,6 +31,10 @@ data/
 .DS_Store
 Thumbs.db
 
+# Startup scripts (contain secrets)
+start_cr.ps1
+start_cr.sh
+
 # Logs
 *.log
 /tmp/
