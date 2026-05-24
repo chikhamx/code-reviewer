@@ -90,6 +90,14 @@ async def bootstrap(config_dir: str = "config") -> AppContext:
     logger.info("LLM providers: %s", providers)
     logger.info("Model aliases: %s", list(ctx.model_router.model_registry.keys()))
 
+    # Auto-start Ollama if configured (local model for intent classification)
+    if "ollama" in providers:
+        try:
+            from code_review_agent.llm.ollama_launcher import ensure_ollama
+            await ensure_ollama(llm_cfg)
+        except Exception as e:
+            logger.warning("Ollama auto-start failed: %s", e)
+
     # ── 3. Rule Engine ──
     from code_review_agent.reviewers.rule_engine import RuleEngine
     ctx.rule_engine = RuleEngine()
