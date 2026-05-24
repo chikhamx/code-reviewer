@@ -28,35 +28,35 @@ class SuggestFixAction(BaseAction):
 
         idx = self._find_target(text, findings)
 
-        if idx is None:
-            # Show a summary so user can pick
-            lines = ["Which finding would you like a fix for? Reply with the number:"]
-            for f in findings:
-                lines.append(
-                    f"  **#{f['index']}** [{f['severity'].upper()}] `{f['file']}:{f['line']}` — {f['title'][:60]}"
-                )
-            lines.append("")
-            lines.append("Example: `how to fix #1` or `第1个怎么修`")
-            return "\n".join(lines)
+        # Build context for all or specific findings
+        if idx is not None:
+            target_findings = [findings[idx]]
+            prefix = "Provide a detailed fix for the following issue."
+        else:
+            target_findings = findings
+            prefix = f"Provide detailed fixes for ALL {len(findings)} issues listed below."
 
-        f = findings[idx]
-        context = (
-            f"File: {f['file']}:{f['line']}\n"
-            f"Severity: {f['severity']}\n"
-            f"Category: {f['category']}\n"
-            f"Issue: {f['title']}\n"
-            f"Description: {f['message']}\n"
-        )
-        if f.get("suggestion"):
-            context += f"Initial suggestion: {f['suggestion']}\n"
-        if f.get("code_snippet"):
-            context += f"Code snippet: {f['code_snippet']}\n"
+        context_parts = []
+        for f in target_findings:
+            parts = [
+                f"---",
+                f"#{f['index']} [{f['severity'].upper()}] {f['file']}:{f['line']}",
+                f"Title: {f['title']}",
+                f"Description: {f['message']}",
+            ]
+            if f.get("suggestion"):
+                parts.append(f"Hint: {f['suggestion']}")
+            if f.get("code_snippet"):
+                parts.append(f"Code: {f['code_snippet']}")
+            context_parts.append("\n".join(parts))
+        context = "\n\n".join(context_parts)
+
         if review.get("diff"):
-            context += f"\nRelevant diff context:\n```diff\n{review['diff'][:4000]}\n```\n"
+            context += f"\n\nRelevant diff:\n```diff\n{review['diff'][:4000]}\n```"
 
         prompt = (
-            "You are an expert code reviewer. Provide a detailed fix for the following issue.\n"
-            "Show the BEFORE and AFTER code, and explain why the fix works.\n\n"
+            f"You are an expert code reviewer. {prefix}\n"
+            "For each issue, show the BEFORE and AFTER code and explain why the fix works.\n\n"
             f"{context}\n\n"
             f"User request: {text}\n"
         )
