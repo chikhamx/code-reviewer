@@ -174,10 +174,13 @@ class IMGateway:
     async def _run_review_job(self, job: ReviewJob) -> str:
         """Execute a review job in the queue. This runs in a background asyncio Task."""
         normalized = job.normalized
+        msg_id = normalized.get("msg_id", "")
+        root_id = normalized.get("root_id", "")
+        session_id = normalized.get("session_id", "")
 
         # Re-create session (not safe to share across tasks)
         session = await self.conversations.get_or_create(
-            session_id=job.session_id,
+            session_id=session_id,
             platform=job.platform,
             channel_id=normalized.get("channel_id", ""),
             user_id=normalized.get("user_id", ""),
@@ -195,8 +198,24 @@ class IMGateway:
             logger.exception("Review job %s failed", job.job_id[:8])
             result = f"Review failed: {e}"
 
-        # Send result reply
-        await self.sender.reply(job.platform, normalized, result)
+        # Send result reply and capture the real message_id
+        real_reply_id = await self.sender.reply(job.platform, normalized, result)
+
+        # Persist reply to message chain (same as sync path)
+        if self.store and msg_id and real_reply_id:
+            self.store.save_message(
+                message_id=real_reply_id,
+                session_id=session_id,
+                root_id=root_id or msg_id,
+                parent_id=msg_id,
+                role="review",
+                source_type="bot_reply",
+                content=result,
+                metadata={
+                    "findings": session.last_review.get("findings", []),
+                    "intent": job.intent,
+                },
+            )
 
         # Update session
         session.history.append({"role": "assistant", "content": result})
