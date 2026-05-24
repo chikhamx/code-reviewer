@@ -70,22 +70,17 @@ jobs:
           ).json()
           token = token_resp['tenant_access_token']
 
-          messages = '${{ toJson(github.event.commits) }}'
-          import json as j; commits = j.loads(messages) if messages else []
-          commit_list = '\\n'.join(
-              f'  - {c[\"message\"].split(chr(10))[0][:80]} (@{c.get(\"author\",{}).get(\"username\",c.get(\"committer\",{}).get(\"username\",\"?\"))})'
-              for c in commits[:5]
+          text = '[Push] {actor} -> {ref}\\nRepo: {repo}'.format(
+              actor='${{ github.actor }}',
+              ref='${{ github.ref_name }}',
+              repo='${{ github.repository }}',
           )
-          if len(commits) > 5:
-              commit_list += f'\\n  ... +{len(commits)-5} more'
-
-          text = f'[Push] ${{ github.actor }} -> ${{ github.ref_name }}\\nRepo: ${{ github.repository }}\\n\\n{commit_list}'
 
           headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
           payload = {
               'receive_id': '$CHAT_ID',
               'msg_type': 'text',
-              'content': j.dumps({'text': text})
+              'content': json.dumps({'text': text})
           }
           resp = requests.post(
               'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id',
